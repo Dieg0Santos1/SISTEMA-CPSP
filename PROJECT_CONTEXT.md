@@ -97,7 +97,7 @@ Además, se incorporarán módulos adicionales como eventos, inventario, eleccio
 - Java + Spring Boot
 
 ### Base de datos
-- PostgreSQL
+- MySQL 8.0.45
 
 ## Arquitectura general
 - Frontend consume API REST
@@ -112,7 +112,7 @@ Además, se incorporarán módulos adicionales como eventos, inventario, eleccio
 
 ## Flujo Git
 - main (estable)
-- develop (integración)
+- dev (integración)
 - feature/*
 - fix/*
 
