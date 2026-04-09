@@ -1,0 +1,170 @@
+Quiero que generes el frontend completo de un sistema web administrativo profesional.
+
+Tecnologías obligatorias:
+- React
+- Vite
+- Tailwind CSS
+- React Router
+- Estructura modular y escalable
+
+Este sistema es para el Colegio de Psicólogos de Lima.
+
+---
+
+## 🎯 OBJETIVO DEL SISTEMA
+
+El sistema permitirá gestionar:
+
+- colegiados
+- pagos y aportaciones
+- habilitación profesional
+- reportes administrativos
+- procesos internos (eventos, inventario, elecciones, tribunal de honor)
+
+Debe ser un sistema administrativo moderno, limpio, profesional y fácil de usar.
+
+---
+
+## 🧩 MÓDULOS DEL SISTEMA
+
+### 1. Gestión de Colegiados
+Debe incluir:
+
+- listado de colegiados (tabla)
+- buscador (DNI, nombre, código)
+- formulario de registro
+- formulario de edición
+- vista de detalle
+- subida de foto
+- selección de especialidades
+- estado (activo/inactivo)
+
+---
+
+### 2. Pagos y Boletas
+
+- formulario de registro de pagos
+- selección de meses
+- historial de pagos por colegiado
+- visualización de habilitación
+- vista de boleta (simulada)
+- control de métodos de pago
+
+---
+
+### 3. Reportes
+
+- reportes por fechas
+- reportes de ingresos
+- filtros por rango
+- tablas de resultados
+
+---
+
+### 4. Consulta Pública
+
+- buscador público
+- resultado:
+  - nombre completo
+  - número de colegiatura
+  - estado habilitado
+  - botón para ver certificado
+
+---
+
+### 5. Eventos
+
+- listado de eventos
+- registro de asistentes
+- vista de asistentes
+
+---
+
+### 6. Inventario
+
+- listado de materiales
+- stock
+- formulario de registro
+- vista de ventas
+
+---
+
+### 7. Elecciones
+
+- vista de validación de votantes
+- vista de mesas electorales
+
+---
+
+### 8. Tribunal de Honor
+
+- listado de denuncias
+- registro de denuncia
+- seguimiento de caso
+- vista de sentencia
+
+---
+
+## 🧠 REQUISITOS DE DISEÑO
+
+- Dashboard moderno (tipo admin panel)
+- Sidebar de navegación
+- Header con usuario
+- Diseño limpio tipo SaaS
+- Responsive (mobile + desktop)
+- Uso de cards, tablas y modales
+- Buen espaciado (no pegado)
+- Iconos (puedes usar lucide-react)
+
+---
+
+## 🧱 ESTRUCTURA DEL PROYECTO
+
+Genera estructura tipo:
+
+src/
+ ├── components/
+ ├── pages/
+ ├── layouts/
+ ├── routes/
+ ├── services/
+ ├── hooks/
+ ├── context/
+
+---
+
+## 🔄 DATOS
+
+- Usa datos mock (JSON)
+- No necesitas backend aún
+- Prepara estructura para API futura
+
+---
+
+## ⚙️ FUNCIONALIDAD
+
+- navegación entre páginas
+- formularios funcionales (sin backend)
+- tablas dinámicas
+- filtros básicos
+- estados de loading simulados
+
+---
+
+## 🎯 IMPORTANTE
+
+- No hagas código simple o básico
+- Quiero un sistema profesional listo para escalar
+- Código limpio y bien organizado
+- Componentes reutilizables
+- Separación clara por módulos
+
+---
+
+## BONUS (si puedes)
+
+- manejo de estado global (Context API)
+- validaciones básicas en formularios
+- sistema de rutas protegido (simulado)
+
+---
