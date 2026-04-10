@@ -1,0 +1,541 @@
+export const cobrosModuleTabs = [
+  { label: 'Resumen', path: '/caja-cobros/resumen' },
+  { label: 'Registrar cobro', path: '/caja-cobros/registrar' },
+  { label: 'Pendientes', path: '/caja-cobros/pendientes' },
+  { label: 'Historial', path: '/caja-cobros/historial' },
+  { label: 'Comprobantes', path: '/caja-cobros/comprobantes' },
+]
+
+export const cobrosSummaryCards = [
+  {
+    title: 'Recaudacion del dia',
+    value: 'S/ 6,840',
+    note: '17 operaciones cerradas en caja principal',
+    accent: 'border-cobalt',
+    noteTone: 'text-cobalt',
+  },
+  {
+    title: 'Pendientes urgentes',
+    value: '12',
+    note: 'Vencen hoy o estan fuera de plazo',
+    accent: 'border-amber-500',
+    noteTone: 'text-amber-600',
+  },
+  {
+    title: 'Comprobantes emitidos',
+    value: '29',
+    note: 'Serie B001 con numeracion activa',
+    accent: 'border-emerald-500',
+    noteTone: 'text-emerald-600',
+  },
+  {
+    title: 'Observaciones de caja',
+    value: '3',
+    note: 'Operaciones pendientes de validacion',
+    accent: 'border-fuchsia-500',
+    noteTone: 'text-fuchsia-600',
+  },
+]
+
+export const cobrosQuickActions = [
+  {
+    title: 'Registrar cobro',
+    description: 'Inicia una operacion nueva con seleccion de colegiado y conceptos.',
+    path: '/caja-cobros/registrar',
+    tone: 'bg-cobalt text-white',
+  },
+  {
+    title: 'Revisar pendientes',
+    description: 'Filtra deudas vencidas, por vencer y listas para cobranza.',
+    path: '/caja-cobros/pendientes',
+    tone: 'bg-white text-slate-900',
+  },
+  {
+    title: 'Consultar historial',
+    description: 'Busca cobros emitidos por fecha, colegiado o comprobante.',
+    path: '/caja-cobros/historial',
+    tone: 'bg-white text-slate-900',
+  },
+]
+
+export const cobrosOperationalAlerts = [
+  {
+    title: 'Mensualidades por vencer',
+    description: '7 colegiados con aportacion de abril aun sin regularizar.',
+    tone: 'bg-amber-50 text-amber-700 border-amber-200',
+  },
+  {
+    title: 'Transferencias por validar',
+    description: '2 operaciones necesitan confirmacion bancaria antes de emitir.',
+    tone: 'bg-sky-50 text-sky-700 border-sky-200',
+  },
+  {
+    title: 'Serie de recibos internos',
+    description: 'Quedan 18 correlativos disponibles antes del siguiente corte.',
+    tone: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  },
+]
+
+export const cobrosCashSnapshot = [
+  {
+    title: 'Caja principal',
+    value: 'S/ 3,280.00',
+    helper: '8 cobros en efectivo',
+  },
+  {
+    title: 'Transferencias',
+    value: 'S/ 2,940.00',
+    helper: '6 operaciones conciliadas',
+  },
+  {
+    title: 'POS / Tarjeta',
+    value: 'S/ 620.00',
+    helper: '3 ventas confirmadas',
+  },
+]
+
+export const cobrosCollectionChannels = [
+  { label: 'Efectivo', value: 48, tone: 'bg-cobalt' },
+  { label: 'Transferencia', value: 43, tone: 'bg-sky-500' },
+  { label: 'POS / Tarjeta', value: 9, tone: 'bg-emerald-500' },
+]
+
+export const cobrosMemberDirectory = [
+  {
+    id: 'member-01',
+    initials: 'FM',
+    name: 'Flor de Maria Abad Quispe',
+    code: 'C.P.L. 15428',
+    dni: '44521098',
+    email: 'flor.abad@colegiados.pe',
+    phone: '+51 999 412 008',
+    statusLabel: 'Habilitada',
+    debtAmount: 230,
+    debtLabel: 'S/ 230.00',
+    lastPayment: '12 Mar 2026',
+    segment: 'Ejercicio profesional',
+    eligibleLabel: 'Apta para procesos electorales',
+    pendingItems: 3,
+  },
+  {
+    id: 'member-02',
+    initials: 'JR',
+    name: 'Javier Raul Paredes Soto',
+    code: 'C.P.L. 11872',
+    dni: '42110445',
+    email: 'javier.paredes@colegiados.pe',
+    phone: '+51 998 218 302',
+    statusLabel: 'Observada',
+    debtAmount: 80,
+    debtLabel: 'S/ 80.00',
+    lastPayment: '02 Abr 2026',
+    segment: 'Tramites y certificaciones',
+    eligibleLabel: 'Requiere regularizacion para algunos procesos',
+    pendingItems: 2,
+  },
+  {
+    id: 'member-03',
+    initials: 'LC',
+    name: 'Lucia Cardenas Montes',
+    code: 'C.P.L. 16304',
+    dni: '47668032',
+    email: 'lucia.cardenas@colegiados.pe',
+    phone: '+51 987 144 621',
+    statusLabel: 'Habilitada',
+    debtAmount: 0,
+    debtLabel: 'S/ 0.00',
+    lastPayment: '08 Abr 2026',
+    segment: 'Colegiada al dia',
+    eligibleLabel: 'Sin restricciones vigentes',
+    pendingItems: 0,
+  },
+]
+
+export const cobrosDocumentTypes = [
+  'Boleta electronica',
+  'Recibo interno',
+  'Constancia de pago',
+]
+
+export const cobrosOrigins = [
+  'Caja principal',
+  'Transferencia',
+  'POS / Tarjeta',
+  'Deposito bancario',
+]
+
+export const cobrosPaymentMethods = [
+  { label: 'Efectivo', active: true },
+  { label: 'Transferencia' },
+  { label: 'POS / Tarjeta' },
+]
+
+export const cobrosPeriodOptions = [
+  'Ene 2026',
+  'Feb 2026',
+  'Mar 2026',
+  'Abr 2026',
+  'May 2026',
+  'Jun 2026',
+]
+
+export const cobrosConceptCatalog = [
+  {
+    id: 'mensualidad',
+    code: 'APO-MEN',
+    name: 'Aportacion mensual',
+    category: 'Aportaciones',
+    baseAmount: 40,
+    allowsQuantity: false,
+    requiresPeriod: true,
+    affectsHabilitation: true,
+    exoneratedIgv: true,
+    defaultMora: 0,
+    defaultDiscount: 0,
+    allowsDiscount: false,
+    requiresAttachment: false,
+    billingMode: 'Por periodo',
+  },
+  {
+    id: 'habilitacion',
+    code: 'HAB-PRO',
+    name: 'Habilitacion profesional',
+    category: 'Habilitacion',
+    baseAmount: 10,
+    allowsQuantity: false,
+    requiresPeriod: false,
+    affectsHabilitation: true,
+    exoneratedIgv: true,
+    defaultMora: 0,
+    defaultDiscount: 0,
+    allowsDiscount: false,
+    requiresAttachment: false,
+    billingMode: 'Monto fijo',
+  },
+  {
+    id: 'ceremonia',
+    code: 'CER-JUR',
+    name: 'Ceremonia de juramentacion',
+    category: 'Ceremonias',
+    baseAmount: 180,
+    allowsQuantity: false,
+    requiresPeriod: false,
+    affectsHabilitation: false,
+    exoneratedIgv: false,
+    defaultMora: 0,
+    defaultDiscount: 0,
+    allowsDiscount: true,
+    requiresAttachment: false,
+    billingMode: 'Monto fijo',
+  },
+  {
+    id: 'fedateo',
+    code: 'FED-DOC',
+    name: 'Fedateo de documentos',
+    category: 'Servicios',
+    baseAmount: 12,
+    allowsQuantity: true,
+    requiresPeriod: false,
+    affectsHabilitation: false,
+    exoneratedIgv: false,
+    defaultMora: 0,
+    defaultDiscount: 0,
+    allowsDiscount: true,
+    requiresAttachment: true,
+    billingMode: 'Por cantidad',
+  },
+  {
+    id: 'constancia',
+    code: 'CON-HAB',
+    name: 'Constancia de habilitacion',
+    category: 'Certificaciones',
+    baseAmount: 25,
+    allowsQuantity: true,
+    requiresPeriod: false,
+    affectsHabilitation: false,
+    exoneratedIgv: false,
+    defaultMora: 0,
+    defaultDiscount: 0,
+    allowsDiscount: true,
+    requiresAttachment: false,
+    billingMode: 'Por cantidad',
+  },
+  {
+    id: 'segunda-especialidad',
+    code: 'ESP-002',
+    name: 'Registro de segunda especialidad',
+    category: 'Especialidades',
+    baseAmount: 320,
+    allowsQuantity: false,
+    requiresPeriod: false,
+    affectsHabilitation: false,
+    exoneratedIgv: false,
+    defaultMora: 0,
+    defaultDiscount: 20,
+    allowsDiscount: true,
+    requiresAttachment: true,
+    billingMode: 'Monto fijo',
+  },
+]
+
+export const cobrosDraftItems = [
+  {
+    id: 'draft-1',
+    conceptId: 'mensualidad',
+    code: 'APO-MEN',
+    concept: 'Aportacion mensual',
+    category: 'Aportaciones',
+    periodLabel: 'Abr 2026, May 2026',
+    quantity: 2,
+    unitAmount: 40,
+    discount: 0,
+    mora: 0,
+    affectsHabilitation: true,
+  },
+  {
+    id: 'draft-2',
+    conceptId: 'fedateo',
+    code: 'FED-DOC',
+    concept: 'Fedateo de documentos',
+    category: 'Servicios',
+    periodLabel: '-',
+    quantity: 2,
+    unitAmount: 12,
+    discount: 0,
+    mora: 0,
+    affectsHabilitation: false,
+  },
+]
+
+export const cobrosPendingSummaryCards = [
+  {
+    title: 'Pendientes totales',
+    value: '38',
+    helper: 'S/ 4,120.00 en cartera activa',
+  },
+  {
+    title: 'Vence hoy',
+    value: '12',
+    helper: 'Prioridad inmediata para caja',
+  },
+  {
+    title: 'Vencidos',
+    value: '9',
+    helper: 'Requieren seguimiento y mora',
+  },
+]
+
+export const cobrosPendingRows = [
+  {
+    id: 'APR-2026-01',
+    memberName: 'Flor de Maria Abad Quispe',
+    memberCode: 'C.P.L. 15428',
+    concept: 'Aportacion mensual',
+    category: 'Aportaciones',
+    detail: 'Jun 2026',
+    dueDate: '10 Abr 2026',
+    amount: 'S/ 40.00',
+    status: 'Vence hoy',
+    statusTone: 'bg-amber-100 text-amber-700',
+    actionLabel: 'Cobrar ahora',
+  },
+  {
+    id: 'HAB-2026-01',
+    memberName: 'Flor de Maria Abad Quispe',
+    memberCode: 'C.P.L. 15428',
+    concept: 'Habilitacion profesional',
+    category: 'Habilitacion',
+    detail: 'Regularizacion anual',
+    dueDate: '18 Abr 2026',
+    amount: 'S/ 10.00',
+    status: 'Pendiente',
+    statusTone: 'bg-slate-100 text-slate-600',
+    actionLabel: 'Agregar a cobro',
+  },
+  {
+    id: 'CER-2026-04',
+    memberName: 'Javier Raul Paredes Soto',
+    memberCode: 'C.P.L. 11872',
+    concept: 'Ceremonia de juramentacion',
+    category: 'Ceremonias',
+    detail: 'Reserva confirmada',
+    dueDate: '22 Abr 2026',
+    amount: 'S/ 180.00',
+    status: 'Programado',
+    statusTone: 'bg-cobalt-soft text-cobalt',
+    actionLabel: 'Preparar cobro',
+  },
+  {
+    id: 'FED-2026-09',
+    memberName: 'Javier Raul Paredes Soto',
+    memberCode: 'C.P.L. 11872',
+    concept: 'Fedateo de documentos',
+    category: 'Servicios',
+    detail: '3 juegos de copias',
+    dueDate: '07 Abr 2026',
+    amount: 'S/ 36.00',
+    status: 'Vencido',
+    statusTone: 'bg-rose-100 text-rose-700',
+    actionLabel: 'Regularizar',
+  },
+  {
+    id: 'CON-2026-13',
+    memberName: 'Lucia Cardenas Montes',
+    memberCode: 'C.P.L. 16304',
+    concept: 'Constancia de habilitacion',
+    category: 'Certificaciones',
+    detail: 'Entrega en oficina',
+    dueDate: '14 Abr 2026',
+    amount: 'S/ 25.00',
+    status: 'Pendiente',
+    statusTone: 'bg-slate-100 text-slate-600',
+    actionLabel: 'Registrar',
+  },
+]
+
+export const cobrosHistorySummaryCards = [
+  {
+    title: 'Hoy',
+    value: 'S/ 6,840.00',
+    helper: '17 operaciones',
+  },
+  {
+    title: 'Ultimos 7 dias',
+    value: 'S/ 24,560.00',
+    helper: '66 operaciones registradas',
+  },
+  {
+    title: 'Ticket promedio',
+    value: 'S/ 145.20',
+    helper: 'Sin incluir anulaciones',
+  },
+]
+
+export const cobrosHistoryRows = [
+  {
+    id: '#772183',
+    date: '09 Abr 2026, 10:45 AM',
+    memberName: 'Flor de Maria Abad Quispe',
+    concept: 'Aportaciones + fedateo',
+    method: 'Transferencia',
+    methodTone: 'bg-[#dbe5ff] text-[#4d63c2]',
+    amount: 'S/ 104.00',
+    document: 'B001-0029894',
+    operator: 'Caja principal',
+    status: 'Emitido',
+  },
+  {
+    id: '#769942',
+    date: '04 Abr 2026, 03:20 PM',
+    memberName: 'Javier Raul Paredes Soto',
+    concept: 'Ceremonia de juramentacion',
+    method: 'Efectivo',
+    methodTone: 'bg-[#e5ecff] text-cobalt',
+    amount: 'S/ 180.00',
+    document: 'B001-0029882',
+    operator: 'Caja principal',
+    status: 'Emitido',
+  },
+  {
+    id: '#761508',
+    date: '29 Mar 2026, 09:10 AM',
+    memberName: 'Lucia Cardenas Montes',
+    concept: 'Constancia de habilitacion',
+    method: 'POS / Tarjeta',
+    methodTone: 'bg-slate-100 text-slate-600',
+    amount: 'S/ 25.00',
+    document: 'B001-0029811',
+    operator: 'Mesa de partes',
+    status: 'Emitido',
+  },
+  {
+    id: '#760992',
+    date: '28 Mar 2026, 05:42 PM',
+    memberName: 'Flor de Maria Abad Quispe',
+    concept: 'Habilitacion profesional',
+    method: 'Transferencia',
+    methodTone: 'bg-[#dbe5ff] text-[#4d63c2]',
+    amount: 'S/ 10.00',
+    document: 'R001-0001842',
+    operator: 'Caja principal',
+    status: 'Pendiente de validacion',
+  },
+]
+
+export const cobrosReceiptSummaryCards = [
+  {
+    title: 'Boletas emitidas',
+    value: '29',
+    helper: '25 emitidas hoy',
+  },
+  {
+    title: 'Recibos internos',
+    value: '8',
+    helper: 'Serie R001 activa',
+  },
+  {
+    title: 'Pendientes de impresion',
+    value: '3',
+    helper: 'Listos para reimpresion o descarga',
+  },
+]
+
+export const cobrosSeriesStatus = [
+  {
+    label: 'Serie B001',
+    value: '0029894',
+    helper: 'Correlativo actual de boletas',
+  },
+  {
+    label: 'Serie R001',
+    value: '0001842',
+    helper: 'Recibos internos',
+  },
+]
+
+export const cobrosReceiptRows = [
+  {
+    id: 'receipt-01',
+    type: 'Boleta electronica',
+    series: 'B001',
+    number: '0029894',
+    issuedTo: 'Flor de Maria Abad Quispe',
+    amount: 'S/ 104.00',
+    issuedAt: '09 Abr 2026, 10:45 AM',
+    status: 'Emitido',
+    statusTone: 'bg-emerald-100 text-emerald-700',
+  },
+  {
+    id: 'receipt-02',
+    type: 'Boleta electronica',
+    series: 'B001',
+    number: '0029882',
+    issuedTo: 'Javier Raul Paredes Soto',
+    amount: 'S/ 180.00',
+    issuedAt: '04 Abr 2026, 03:20 PM',
+    status: 'Emitido',
+    statusTone: 'bg-emerald-100 text-emerald-700',
+  },
+  {
+    id: 'receipt-03',
+    type: 'Recibo interno',
+    series: 'R001',
+    number: '0001842',
+    issuedTo: 'Flor de Maria Abad Quispe',
+    amount: 'S/ 10.00',
+    issuedAt: '28 Mar 2026, 05:42 PM',
+    status: 'Pendiente de validacion',
+    statusTone: 'bg-amber-100 text-amber-700',
+  },
+  {
+    id: 'receipt-04',
+    type: 'Constancia de pago',
+    series: 'C001',
+    number: '0000944',
+    issuedTo: 'Lucia Cardenas Montes',
+    amount: 'S/ 25.00',
+    issuedAt: '29 Mar 2026, 09:10 AM',
+    status: 'Disponible para descarga',
+    statusTone: 'bg-sky-100 text-sky-700',
+  },
+]

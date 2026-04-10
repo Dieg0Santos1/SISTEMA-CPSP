@@ -1,23 +1,77 @@
+import { useMemo, useState } from 'react'
 import {
   ChevronLeft,
   ChevronRight,
   Download,
-  EllipsisVertical,
+  Eye,
   Filter,
+  PencilLine,
   Plus,
+  Search,
 } from 'lucide-react'
-import AdminLayout from '../layouts/AdminLayout'
 import {
   colegiadosFilters,
-  colegiadosPagination,
   colegiadosRows,
   colegiadosSummaryCards,
-} from '../data/dashboardData'
+} from '../data/colegiados/colegiadosData'
 
 function ColegiadosPage() {
+  const [activeFilter, setActiveFilter] = useState(colegiadosFilters[0])
+  const [searchTerm, setSearchTerm] = useState('')
+  const [currentPage, setCurrentPage] = useState(1)
+  const itemsPerPage = 3
+
+  const filteredRows = useMemo(() => {
+    const normalizedSearch = searchTerm.trim().toLowerCase()
+
+    return colegiadosRows.filter((colegiado) => {
+      const matchesFilter =
+        activeFilter === 'Todos' ? true : colegiado.status === activeFilter
+
+      const matchesSearch =
+        normalizedSearch.length === 0
+          ? true
+          : [
+              colegiado.code,
+              colegiado.dni,
+              colegiado.name,
+              colegiado.specialty,
+            ].some((value) => value.toLowerCase().includes(normalizedSearch))
+
+      return matchesFilter && matchesSearch
+    })
+  }, [activeFilter, searchTerm])
+
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / itemsPerPage))
+  const safePage = Math.min(currentPage, totalPages)
+  const pageNumbers = Array.from({ length: totalPages }, (_, index) => index + 1)
+
+  const paginatedRows = useMemo(() => {
+    const start = (safePage - 1) * itemsPerPage
+    return filteredRows.slice(start, start + itemsPerPage)
+  }, [filteredRows, safePage])
+
+  const handleFilterChange = (filter) => {
+    setActiveFilter(filter)
+    setCurrentPage(1)
+  }
+
+  const handleSearchChange = (event) => {
+    setSearchTerm(event.target.value)
+    setCurrentPage(1)
+  }
+
+  const clearFilters = () => {
+    setSearchTerm('')
+    setActiveFilter('Todos')
+    setCurrentPage(1)
+  }
+
+  const startResult = filteredRows.length === 0 ? 0 : (safePage - 1) * itemsPerPage + 1
+  const endResult = Math.min(safePage * itemsPerPage, filteredRows.length)
+
   return (
-    <AdminLayout>
-      <div className="space-y-6">
+    <div className="space-y-6">
         <section className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
           <div>
             <div className="flex items-center gap-2 text-sm text-slate-400">
@@ -70,34 +124,60 @@ function ColegiadosPage() {
         </section>
 
         <section className="rounded-[30px] border border-white/80 bg-white p-4 shadow-[0_18px_50px_-38px_rgba(15,23,42,0.7)] sm:p-6">
-          <div className="flex flex-col gap-4 border-b border-slate-200 pb-4 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex flex-wrap gap-2">
-              {colegiadosFilters.map((filter, index) => (
-                <button
-                  key={filter}
-                  type="button"
-                  className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
-                    index === 0
-                      ? 'bg-cobalt-soft text-cobalt shadow-[inset_0_-2px_0_0_#1739a6]'
-                      : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
-                  }`}
-                >
-                  {filter}
-                </button>
-              ))}
+          <div className="flex flex-col gap-4 border-b border-slate-200 pb-4">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex flex-wrap gap-2">
+                {colegiadosFilters.map((filter) => (
+                  <button
+                    key={filter}
+                    type="button"
+                    onClick={() => handleFilterChange(filter)}
+                    className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
+                      activeFilter === filter
+                        ? 'bg-cobalt-soft text-cobalt shadow-[inset_0_-2px_0_0_#1739a6]'
+                        : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                    }`}
+                  >
+                    {filter}
+                  </button>
+                ))}
+              </div>
+
+              <button
+                type="button"
+                className="inline-flex items-center gap-2 self-start rounded-2xl px-3 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-50 hover:text-slate-900"
+              >
+                <Filter size={16} strokeWidth={2.2} />
+                Filtros Avanzados
+              </button>
             </div>
 
-            <button
-              type="button"
-              className="inline-flex items-center gap-2 self-start rounded-2xl px-3 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-50 hover:text-slate-900"
-            >
-              <Filter size={16} strokeWidth={2.2} />
-              Filtros Avanzados
-            </button>
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <label className="group flex w-full items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 transition focus-within:border-cobalt focus-within:bg-white lg:max-w-md">
+                <Search
+                  size={18}
+                  className="text-slate-400 transition group-focus-within:text-cobalt"
+                />
+                <input
+                  type="search"
+                  value={searchTerm}
+                  onChange={handleSearchChange}
+                  placeholder="Buscar por DNI, nombre, codigo o especialidad"
+                  className="w-full bg-transparent text-sm font-medium text-slate-700 outline-none placeholder:text-slate-400"
+                />
+              </label>
+
+              <div className="flex flex-wrap items-center gap-3 text-sm text-slate-500">
+                <span className="rounded-full bg-slate-100 px-3 py-1 font-semibold text-slate-700">
+                  {filteredRows.length} resultado(s)
+                </span>
+                <span>Filtro activo: {activeFilter}</span>
+              </div>
+            </div>
           </div>
 
           <div className="mt-5 overflow-hidden rounded-[26px] border border-slate-200">
-            <div className="hidden grid-cols-[1.05fr_1fr_2fr_1.7fr_1.2fr_90px] bg-[#e8f0ff] px-6 py-4 text-[11px] font-bold uppercase tracking-[0.22em] text-slate-500 lg:grid">
+            <div className="hidden grid-cols-[1.05fr_1fr_2fr_1.7fr_1.2fr_140px] bg-[#e8f0ff] px-6 py-4 text-[11px] font-bold uppercase tracking-[0.22em] text-slate-500 lg:grid">
               <span>Codigo</span>
               <span>DNI</span>
               <span>Nombre completo</span>
@@ -107,99 +187,137 @@ function ColegiadosPage() {
             </div>
 
             <div className="divide-y divide-slate-200 bg-white">
-              {colegiadosRows.map((colegiado) => (
-                <div
-                  key={colegiado.code}
-                  className="grid gap-4 px-4 py-5 lg:grid-cols-[1.05fr_1fr_2fr_1.7fr_1.2fr_90px] lg:items-center lg:px-6"
-                >
-                  <div>
-                    <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-400 lg:hidden">
-                      Codigo
-                    </p>
-                    <p className="font-semibold leading-6 text-cobalt">
-                      {colegiado.code.slice(0, 4)}
-                      <br />
-                      {colegiado.code.slice(4)}
-                    </p>
-                  </div>
-
-                  <div>
-                    <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-400 lg:hidden">
-                      DNI
-                    </p>
-                    <p className="text-sm font-medium text-slate-700">{colegiado.dni}</p>
-                  </div>
-
-                  <div>
-                    <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-400 lg:hidden">
-                      Nombre completo
-                    </p>
-                    <div className="flex items-center gap-3">
-                      <div
-                        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white ${colegiado.avatarTone}`}
-                      >
-                        {colegiado.initials}
-                      </div>
-                      <p className="max-w-[17rem] font-semibold leading-6 text-slate-900">
-                        {colegiado.name}
+              {paginatedRows.length > 0 ? (
+                paginatedRows.map((colegiado) => (
+                  <div
+                    key={colegiado.code}
+                    className="grid gap-4 px-4 py-5 lg:grid-cols-[1.05fr_1fr_2fr_1.7fr_1.2fr_140px] lg:items-center lg:px-6"
+                  >
+                    <div>
+                      <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-400 lg:hidden">
+                        Codigo
+                      </p>
+                      <p className="font-semibold leading-6 text-cobalt">
+                        {colegiado.code.slice(0, 4)}
+                        <br />
+                        {colegiado.code.slice(4)}
                       </p>
                     </div>
-                  </div>
 
-                  <div>
-                    <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-400 lg:hidden">
-                      Especialidad
-                    </p>
-                    <p className="max-w-[16rem] text-sm leading-6 text-slate-600">
-                      {colegiado.specialty}
-                    </p>
-                  </div>
+                    <div>
+                      <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-400 lg:hidden">
+                        DNI
+                      </p>
+                      <p className="text-sm font-medium text-slate-700">{colegiado.dni}</p>
+                    </div>
 
-                  <div>
-                    <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-400 lg:hidden">
-                      Estado
-                    </p>
-                    <span
-                      className={`inline-flex rounded-full px-4 py-2 text-sm font-semibold ${colegiado.statusTone}`}
-                    >
-                      {colegiado.status}
-                    </span>
-                  </div>
+                    <div>
+                      <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-400 lg:hidden">
+                        Nombre completo
+                      </p>
+                      <div className="flex items-center gap-3">
+                        <div
+                          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white ${colegiado.avatarTone}`}
+                        >
+                          {colegiado.initials}
+                        </div>
+                        <p className="max-w-[17rem] font-semibold leading-6 text-slate-900">
+                          {colegiado.name}
+                        </p>
+                      </div>
+                    </div>
 
-                  <div className="flex justify-end">
+                    <div>
+                      <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-400 lg:hidden">
+                        Especialidad
+                      </p>
+                      <p className="max-w-[16rem] text-sm leading-6 text-slate-600">
+                        {colegiado.specialty}
+                      </p>
+                    </div>
+
+                    <div>
+                      <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-400 lg:hidden">
+                        Estado
+                      </p>
+                      <span
+                        className={`inline-flex rounded-full px-4 py-2 text-sm font-semibold ${colegiado.statusTone}`}
+                      >
+                        {colegiado.status}
+                      </span>
+                    </div>
+
+                    <div className="flex gap-2 lg:justify-end">
+                      <button
+                        type="button"
+                        aria-label={`Ver detalle de ${colegiado.name}`}
+                        title="Ver detalle"
+                        className="inline-flex h-10 w-10 items-center justify-center rounded-2xl text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
+                      >
+                        <Eye size={18} strokeWidth={2.1} />
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={`Editar a ${colegiado.name}`}
+                        title="Editar"
+                        className="inline-flex h-10 w-10 items-center justify-center rounded-2xl text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
+                      >
+                        <PencilLine size={18} strokeWidth={2.1} />
+                      </button>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="px-6 py-14 text-center">
+                  <div className="mx-auto max-w-md space-y-3">
+                    <div className="mx-auto inline-flex rounded-2xl bg-slate-100 p-4 text-slate-500">
+                      <Search size={22} strokeWidth={2.1} />
+                    </div>
+                    <h2 className="text-xl font-semibold text-slate-900">
+                      No encontramos colegiados con ese criterio
+                    </h2>
+                    <p className="text-sm leading-6 text-slate-500">
+                      Prueba cambiando el filtro o ajustando la busqueda para ver mas
+                      resultados.
+                    </p>
                     <button
                       type="button"
-                      className="inline-flex h-10 w-10 items-center justify-center rounded-2xl text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
+                      onClick={clearFilters}
+                      className="inline-flex rounded-2xl bg-cobalt-soft px-4 py-2 text-sm font-semibold text-cobalt"
                     >
-                      <EllipsisVertical size={18} strokeWidth={2.1} />
+                      Limpiar filtros
                     </button>
                   </div>
                 </div>
-              ))}
+              )}
             </div>
           </div>
 
           <div className="mt-5 flex flex-col gap-4 text-sm text-slate-500 sm:flex-row sm:items-center sm:justify-between">
-            <p>Mostrando 1 a 10 de 12,482 colegiados</p>
+            <p>
+              Mostrando {startResult} a {endResult} de {filteredRows.length} colegiados
+              filtrados
+            </p>
 
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-400 transition hover:text-slate-700"
+                disabled={safePage === 1}
+                onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+                className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-400 transition hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <ChevronLeft size={16} strokeWidth={2.2} />
               </button>
 
-              {colegiadosPagination.map((page, index) => (
+              {pageNumbers.map((page) => (
                 <button
-                  key={`${page}-${index}`}
+                  key={page}
                   type="button"
+                  onClick={() => setCurrentPage(page)}
                   className={`inline-flex h-10 min-w-10 items-center justify-center rounded-xl border px-3 text-sm font-semibold transition ${
-                    index === 0
+                    page === safePage
                       ? 'border-cobalt bg-cobalt text-white'
-                      : page === '...'
-                        ? 'border-transparent bg-transparent text-slate-400'
-                        : 'border-slate-200 bg-white text-slate-600 hover:text-slate-900'
+                      : 'border-slate-200 bg-white text-slate-600 hover:text-slate-900'
                   }`}
                 >
                   {page}
@@ -208,15 +326,16 @@ function ColegiadosPage() {
 
               <button
                 type="button"
-                className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-400 transition hover:text-slate-700"
+                disabled={safePage === totalPages}
+                onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+                className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-400 transition hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <ChevronRight size={16} strokeWidth={2.2} />
               </button>
             </div>
           </div>
         </section>
-      </div>
-    </AdminLayout>
+    </div>
   )
 }
 

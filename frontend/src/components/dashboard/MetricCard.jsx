@@ -1,4 +1,6 @@
-function MetricCard({ title, value, note, helper, icon: Icon, accent, badgeTone }) {
+import { createElement } from 'react'
+
+function MetricCard({ title, value, note, helper, icon, accent, badgeTone }) {
   return (
     <article
       className={`rounded-[26px] border border-slate-200 bg-white p-5 shadow-[0_14px_40px_-30px_rgba(15,23,42,0.5)] ${accent}`}
@@ -10,9 +12,7 @@ function MetricCard({ title, value, note, helper, icon: Icon, accent, badgeTone 
           </p>
         </div>
 
-        <div className={`rounded-2xl p-3 ${badgeTone}`}>
-          <Icon size={20} strokeWidth={2.2} />
-        </div>
+        <div className={`rounded-2xl p-3 ${badgeTone}`}>{createElement(icon, { size: 20, strokeWidth: 2.2 })}</div>
       </div>
 
       <div className="flex items-end justify-between gap-4">

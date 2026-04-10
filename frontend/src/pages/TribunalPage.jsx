@@ -1,3 +1,4 @@
+import { createElement } from 'react'
 import {
   ChevronLeft,
   ChevronRight,
@@ -5,17 +6,15 @@ import {
   MoreVertical,
   UserRound,
 } from 'lucide-react'
-import AdminLayout from '../layouts/AdminLayout'
 import {
   tribunalCases,
   tribunalPagination,
   tribunalSummaryCards,
-} from '../data/dashboardData'
+} from '../data/tribunal/tribunalData'
 
 function TribunalPage() {
   return (
-    <AdminLayout>
-      <div className="space-y-6">
+    <div className="space-y-6">
         <section className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
           <div>
             <h1 className="text-3xl font-bold tracking-tight text-slate-950 sm:text-4xl">
@@ -37,23 +36,23 @@ function TribunalPage() {
         </section>
 
         <section className="grid gap-4 lg:grid-cols-4">
-          {tribunalSummaryCards.map(({ title, value, accent, iconTone, icon: Icon }) => (
+          {tribunalSummaryCards.map((card) => (
             <article
-              key={title}
-              className={`rounded-[26px] border border-slate-200 bg-white p-5 shadow-[0_16px_34px_-30px_rgba(15,23,42,0.55)] ${accent}`}
+              key={card.title}
+              className={`rounded-[26px] border border-slate-200 bg-white p-5 shadow-[0_16px_34px_-30px_rgba(15,23,42,0.55)] ${card.accent}`}
             >
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <p className="text-xs font-bold uppercase tracking-[0.22em] text-slate-500">
-                    {title}
+                    {card.title}
                   </p>
                   <p className="mt-2 text-[2.15rem] font-bold tracking-tight text-slate-950">
-                    {value}
+                    {card.value}
                   </p>
                 </div>
 
-                <div className={`rounded-2xl bg-slate-50 p-3 ${iconTone}`}>
-                  <Icon size={20} strokeWidth={2.2} />
+                <div className={`rounded-2xl bg-slate-50 p-3 ${card.iconTone}`}>
+                  {createElement(card.icon, { size: 20, strokeWidth: 2.2 })}
                 </div>
               </div>
             </article>
@@ -171,8 +170,7 @@ function TribunalPage() {
             </div>
           </div>
         </section>
-      </div>
-    </AdminLayout>
+    </div>
   )
 }
 

@@ -1,3 +1,4 @@
+import { createElement } from 'react'
 import {
   ArrowRight,
   CheckCheck,
@@ -13,13 +14,11 @@ import {
   recentActivity,
   statCards,
   upcomingCeremonies,
-} from '../data/dashboardData'
-import AdminLayout from '../layouts/AdminLayout'
+} from '../data/dashboard/dashboardData'
 
 function DashboardPage() {
   return (
-    <AdminLayout>
-      <div className="space-y-6">
+    <div className="space-y-6">
         <section className="flex flex-col gap-3">
           <span className="inline-flex w-fit rounded-full bg-cobalt-soft px-3 py-1 text-xs font-semibold uppercase tracking-[0.22em] text-cobalt">
             Resumen ejecutivo
@@ -141,9 +140,13 @@ function DashboardPage() {
               </div>
 
               <div className="space-y-3">
-                {quickActions.map(({ title, description, primary, icon: Icon, path }) => {
+                {quickActions.map((action) => {
+                  const actionIcon = createElement(action.icon, {
+                    size: 18,
+                    strokeWidth: 2.2,
+                  })
                   const classes = `flex w-full items-center justify-between rounded-2xl px-4 py-4 text-left transition ${
-                    primary
+                    action.primary
                       ? 'bg-[linear-gradient(135deg,#1739a6_0%,#204edc_100%)] text-white shadow-[0_20px_36px_-30px_rgba(30,64,175,0.9)]'
                       : 'bg-cobalt-soft text-slate-800 hover:bg-[#d7e3ff]'
                   }`
@@ -153,19 +156,19 @@ function DashboardPage() {
                       <div className="flex items-center gap-3">
                         <div
                           className={`rounded-2xl p-3 ${
-                            primary ? 'bg-white/[0.12] text-white' : 'bg-white text-cobalt'
+                            action.primary ? 'bg-white/[0.12] text-white' : 'bg-white text-cobalt'
                           }`}
                         >
-                          <Icon size={18} strokeWidth={2.2} />
+                          {actionIcon}
                         </div>
                         <div>
-                          <p className="font-semibold">{title}</p>
+                          <p className="font-semibold">{action.title}</p>
                           <p
                             className={`text-xs ${
-                              primary ? 'text-blue-100' : 'text-slate-500'
+                              action.primary ? 'text-blue-100' : 'text-slate-500'
                             }`}
                           >
-                            {description}
+                            {action.description}
                           </p>
                         </div>
                       </div>
@@ -174,11 +177,11 @@ function DashboardPage() {
                     </>
                   )
 
-                  if (path) {
+                  if (action.path) {
                     return (
                       <Link
-                        key={title}
-                        to={path}
+                        key={action.title}
+                        to={action.path}
                         className={classes}
                       >
                         {content}
@@ -188,12 +191,12 @@ function DashboardPage() {
 
                   return (
                     <button
-                    key={title}
-                    type="button"
-                    className={classes}
-                  >
-                    {content}
-                  </button>
+                      key={action.title}
+                      type="button"
+                      className={classes}
+                    >
+                      {content}
+                    </button>
                   )
                 })}
               </div>
@@ -323,8 +326,7 @@ function DashboardPage() {
             </div>
           </footer>
         </section>
-      </div>
-    </AdminLayout>
+    </div>
   )
 }
 
