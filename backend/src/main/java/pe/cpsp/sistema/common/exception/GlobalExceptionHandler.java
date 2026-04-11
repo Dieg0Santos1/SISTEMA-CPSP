@@ -21,6 +21,13 @@ public class GlobalExceptionHandler {
         HttpStatus.NOT_FOUND, exception.getMessage(), request.getRequestURI(), List.of());
   }
 
+  @ExceptionHandler(DuplicateResourceException.class)
+  public ResponseEntity<ApiErrorResponse> handleConflict(
+      DuplicateResourceException exception, HttpServletRequest request) {
+    return buildResponse(
+        HttpStatus.CONFLICT, exception.getMessage(), request.getRequestURI(), List.of());
+  }
+
   @ExceptionHandler(MethodArgumentNotValidException.class)
   public ResponseEntity<ApiErrorResponse> handleValidation(
       MethodArgumentNotValidException exception, HttpServletRequest request) {
