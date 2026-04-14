@@ -1,0 +1,2 @@
+ALTER TABLE colegiado
+    MODIFY COLUMN foto_url LONGTEXT;

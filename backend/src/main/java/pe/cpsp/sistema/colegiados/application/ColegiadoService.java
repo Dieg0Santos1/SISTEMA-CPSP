@@ -2,8 +2,6 @@ package pe.cpsp.sistema.colegiados.application;
 
 import java.time.Clock;
 import java.time.LocalDate;
-import java.time.YearMonth;
-import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -17,6 +15,7 @@ import pe.cpsp.sistema.colegiados.api.dto.ColegiadoUpsertRequest;
 import pe.cpsp.sistema.colegiados.domain.model.Colegiado;
 import pe.cpsp.sistema.colegiados.infrastructure.persistence.repository.ColegiadoRepository;
 import pe.cpsp.sistema.common.exception.DuplicateResourceException;
+import pe.cpsp.sistema.common.exception.InvalidRequestException;
 import pe.cpsp.sistema.common.exception.ResourceNotFoundException;
 import pe.cpsp.sistema.tesoreria.domain.model.CobroDetalle;
 import pe.cpsp.sistema.tesoreria.infrastructure.persistence.repository.CobroRepository;
@@ -150,15 +149,16 @@ public class ColegiadoService {
   }
 
   private void applyRequest(Colegiado colegiado, ColegiadoUpsertRequest request) {
-    colegiado.setNombre(clean(request.nombre()));
-    colegiado.setApellidoPaterno(clean(request.apellidoPaterno()));
-    colegiado.setApellidoMaterno(clean(request.apellidoMaterno()));
-    colegiado.setDni(clean(request.dni()));
+    colegiado.setNombre(normalizePersonName(request.nombre()));
+    colegiado.setApellidoPaterno(normalizePersonName(request.apellidoPaterno()));
+    colegiado.setApellidoMaterno(normalizePersonName(request.apellidoMaterno()));
+    colegiado.setDni(normalizeDigits(request.dni()));
     colegiado.setFechaNacimiento(request.fechaNacimiento());
+    colegiado.setFechaIniciacion(request.fechaIniciacion());
     colegiado.setSexo(cleanNullable(request.sexo()));
-    colegiado.setRuc(cleanNullable(request.ruc()));
-    colegiado.setCelular(cleanNullable(request.celular()));
-    colegiado.setEmail(cleanNullable(request.email()));
+    colegiado.setRuc(normalizeFixedDigits(request.ruc(), 11, "El RUC debe contener 11 digitos."));
+    colegiado.setCelular(normalizeCelular(request.celular()));
+    colegiado.setEmail(normalizeEmail(request.email()));
     colegiado.setDireccion(cleanNullable(request.direccion()));
     colegiado.setFotoUrl(cleanNullable(request.fotoUrl()));
   }
@@ -199,29 +199,11 @@ public class ColegiadoService {
   }
 
   private HabilitacionInfo toHabilitacionInfo(CobroDetalle detalle) {
-    LocalDate periodoBase = resolvePeriodoBase(detalle);
-    LocalDate habilitadoHasta = periodoBase.plusMonths(4).minusDays(1);
+    LocalDate fechaPago = detalle.getCobro().getFechaEmision();
+    LocalDate habilitadoHasta = fechaPago.plusMonths(3);
     boolean habilitado = !LocalDate.now(appClock).isAfter(habilitadoHasta);
 
-    return new HabilitacionInfo(periodoBase, habilitadoHasta, habilitado);
-  }
-
-  private LocalDate resolvePeriodoBase(CobroDetalle detalle) {
-    String periodoReferencia = detalle.getPeriodoReferencia();
-
-    if (periodoReferencia != null && !periodoReferencia.isBlank()) {
-      try {
-        return YearMonth.parse(periodoReferencia.trim()).atDay(1);
-      } catch (DateTimeParseException ignored) {
-        try {
-          return LocalDate.parse(periodoReferencia.trim()).withDayOfMonth(1);
-        } catch (DateTimeParseException ignoredAgain) {
-          // Fallback a fecha de emision cuando el formato del periodo no es mensual.
-        }
-      }
-    }
-
-    return detalle.getCobro().getFechaEmision().withDayOfMonth(1);
+    return new HabilitacionInfo(fechaPago, habilitadoHasta, habilitado);
   }
 
   private ColegiadoResponse toResponse(Colegiado colegiado, HabilitacionInfo habilitacionInfo) {
@@ -280,6 +262,80 @@ public class ColegiadoService {
   private String cleanNullable(String value) {
     String cleaned = clean(value);
     return cleaned.isBlank() ? null : cleaned;
+  }
+
+  private String normalizeEmail(String value) {
+    String cleaned = cleanNullable(value);
+    return cleaned == null ? null : cleaned.toLowerCase();
+  }
+
+  private String normalizeDigits(String value) {
+    return clean(value).replaceAll("\\D", "");
+  }
+
+  private String normalizeFixedDigits(String value, int expectedLength, String message) {
+    String digits = normalizeDigits(value);
+
+    if (digits.isBlank()) {
+      return null;
+    }
+
+    if (digits.length() != expectedLength) {
+      throw new InvalidRequestException(message);
+    }
+
+    return digits;
+  }
+
+  private String normalizeCelular(String value) {
+    String digits = normalizeDigits(value);
+
+    if (digits.isBlank()) {
+      return null;
+    }
+
+    if (digits.startsWith("51")) {
+      digits = digits.substring(2);
+    }
+
+    if (digits.length() != 9) {
+      throw new InvalidRequestException(
+          "El celular debe contener 9 digitos y se almacenara con el prefijo +51.");
+    }
+
+    return "+51" + digits;
+  }
+
+  private String normalizePersonName(String value) {
+    String cleaned = clean(value).toLowerCase();
+
+    if (cleaned.isBlank()) {
+      return "";
+    }
+
+    StringBuilder normalized = new StringBuilder(cleaned.length());
+    boolean capitalizeNext = true;
+
+    for (char currentChar : cleaned.toCharArray()) {
+      if (Character.isWhitespace(currentChar)) {
+        if (!normalized.isEmpty() && normalized.charAt(normalized.length() - 1) != ' ') {
+          normalized.append(' ');
+        }
+        capitalizeNext = true;
+        continue;
+      }
+
+      if (currentChar == '-' || currentChar == '\'') {
+        normalized.append(currentChar);
+        capitalizeNext = true;
+        continue;
+      }
+
+      normalized.append(capitalizeNext ? Character.toUpperCase(currentChar) : currentChar);
+      capitalizeNext = false;
+    }
+
+    return normalized.toString().trim();
   }
 
   private record HabilitacionInfo(

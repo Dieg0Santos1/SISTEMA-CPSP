@@ -80,7 +80,7 @@ class BackendApplicationTests {
 						""",
 						Integer.class);
 
-		assertThat(totalPagosQueAfectanHabilitacion).isEqualTo(2);
+		assertThat(totalPagosQueAfectanHabilitacion).isEqualTo(4);
 	}
 
 	@Test

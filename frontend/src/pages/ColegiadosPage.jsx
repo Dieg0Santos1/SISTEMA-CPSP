@@ -11,6 +11,9 @@ import {
   Search,
   Trash2,
   Upload,
+  UserCheck,
+  UserMinus,
+  Users,
   X,
 } from 'lucide-react'
 import { colegiadosFilters } from '../data/colegiados/colegiadosData'
@@ -27,8 +30,9 @@ const emptyForm = {
   dni: '',
   sexo: '',
   fechaNacimiento: '',
+  fechaIniciacion: '',
   ruc: '',
-  telefono: '',
+  celular: '',
   email: '',
   direccion: '',
   fotoUrl: '',
@@ -51,8 +55,53 @@ const formatDate = (value) => {
   }).format(new Date(`${value}T00:00:00`))
 }
 
+const calculateAge = (value) => {
+  if (!value) {
+    return 'No registrada'
+  }
+
+  const birthDate = new Date(`${value}T00:00:00`)
+  const today = new Date()
+
+  let age = today.getFullYear() - birthDate.getFullYear()
+  const monthDifference = today.getMonth() - birthDate.getMonth()
+
+  if (
+    monthDifference < 0 ||
+    (monthDifference === 0 && today.getDate() < birthDate.getDate())
+  ) {
+    age -= 1
+  }
+
+  return `${age} años`
+}
+
+const formatBirthdayMonthDay = (value) => {
+  if (!value) {
+    return 'No registrado'
+  }
+
+  return new Intl.DateTimeFormat('es-PE', {
+    day: '2-digit',
+    month: 'long',
+  }).format(new Date(`${value}T00:00:00`))
+}
+
 const formatStatusLabel = (status) =>
   status === 'HABILITADO' ? 'Habilitado' : 'No Habilitado'
+
+const normalizeDniInput = (value) => value.replace(/\D/g, '').slice(0, 8)
+
+const normalizeCelularInput = (value) => {
+  const digits = value.replace(/\D/g, '')
+
+  if (!digits) {
+    return ''
+  }
+
+  const nationalNumber = digits.startsWith('51') ? digits.slice(2, 11) : digits.slice(0, 9)
+  return `+51${nationalNumber}`
+}
 
 const getInitials = (name = '') =>
   name
@@ -103,6 +152,7 @@ const mapColegiadoToRow = (colegiado) => ({
   vigencia: buildVigenciaLabel(colegiado),
   sexo: colegiado.sexo ?? 'No registrado',
   fechaNacimiento: colegiado.fechaNacimiento,
+  fechaIniciacion: colegiado.fechaIniciacion,
   email: colegiado.email ?? 'No registrado',
   celular: colegiado.celular ?? 'No registrado',
   ruc: colegiado.ruc ?? 'No registrado',
@@ -112,17 +162,51 @@ const mapColegiadoToRow = (colegiado) => ({
   especialidades: Array.isArray(colegiado.especialidades) ? colegiado.especialidades : [],
 })
 
+const emptyIfPlaceholder = (value) =>
+  value === 'No registrado' || value === 'No registrada' ? '' : value ?? ''
+
+const buildFormValuesFromColegiado = (colegiado) => ({
+  nombres: colegiado.nombres ?? '',
+  apellidoPaterno: colegiado.apellidoPaterno ?? '',
+  apellidoMaterno: colegiado.apellidoMaterno ?? '',
+  dni: colegiado.dni ?? '',
+  sexo: emptyIfPlaceholder(colegiado.sexo),
+  fechaNacimiento: colegiado.fechaNacimiento ?? '',
+  fechaIniciacion: colegiado.fechaIniciacion ?? '',
+  ruc: emptyIfPlaceholder(colegiado.ruc),
+  celular: emptyIfPlaceholder(colegiado.celular),
+  email: emptyIfPlaceholder(colegiado.email),
+  direccion: emptyIfPlaceholder(colegiado.direccion),
+  fotoUrl: colegiado.photo ?? '',
+})
+
+const buildColegiadoPayload = (formValues) => ({
+  nombre: formValues.nombres.trim(),
+  apellidoPaterno: formValues.apellidoPaterno.trim(),
+  apellidoMaterno: formValues.apellidoMaterno.trim(),
+  dni: formValues.dni.trim(),
+  sexo: formValues.sexo,
+  fechaNacimiento: formValues.fechaNacimiento,
+  fechaIniciacion: formValues.fechaIniciacion,
+  ruc: formValues.ruc.trim(),
+  celular: formValues.celular.trim(),
+  email: formValues.email.trim(),
+  direccion: formValues.direccion.trim(),
+  fotoUrl: formValues.fotoUrl,
+})
+
 function ColegiadosPage() {
   const [rows, setRows] = useState([])
   const [activeFilter, setActiveFilter] = useState(colegiadosFilters[0])
   const [searchTerm, setSearchTerm] = useState('')
   const [currentPage, setCurrentPage] = useState(1)
-  const [selectedRowId, setSelectedRowId] = useState(null)
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
+  const [formMode, setFormMode] = useState('create')
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false)
   const [isEspecialidadesModalOpen, setIsEspecialidadesModalOpen] = useState(false)
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
   const [selectedColegiado, setSelectedColegiado] = useState(null)
+  const [shouldReturnToDetail, setShouldReturnToDetail] = useState(false)
   const [formValues, setFormValues] = useState(emptyForm)
   const [photoPreview, setPhotoPreview] = useState('')
   const [especialidadesForm, setEspecialidadesForm] = useState([''])
@@ -132,6 +216,7 @@ function ColegiadosPage() {
   const [isDeleting, setIsDeleting] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
   const itemsPerPage = 3
+  const isEditMode = formMode === 'edit'
 
   async function loadColegiados() {
     setIsLoading(true)
@@ -149,10 +234,6 @@ function ColegiadosPage() {
       const data = await response.json()
       const mappedRows = data.map(mapColegiadoToRow)
       setRows(mappedRows)
-
-      if (selectedRowId && !mappedRows.some((colegiado) => colegiado.id === selectedRowId)) {
-        setSelectedRowId(null)
-      }
 
       if (selectedColegiado) {
         const refreshedSelected = mappedRows.find((colegiado) => colegiado.id === selectedColegiado.id)
@@ -203,23 +284,29 @@ function ColegiadosPage() {
       {
         title: 'Total registrados',
         value: formatCount(totalRegistrados),
-        note: 'Padron sincronizado con backend',
-        accent: 'border-cobalt',
-        noteTone: 'text-slate-500',
+        note: totalRegistrados === 0 ? 'Sin registros' : 'Padron activo',
+        helper: 'Registro total',
+        icon: Users,
+        accent: 'border-[#d9e5ff]',
+        badgeTone: 'bg-[#dce8ff] text-cobalt',
       },
       {
         title: 'Habilitados',
         value: formatCount(habilitados),
-        note: `${habilitadosPercent.toFixed(1)}% del padron total`,
-        accent: 'border-emerald-500',
-        noteTone: 'text-slate-500',
+        note: `${habilitadosPercent.toFixed(1)}%`,
+        helper: 'Al dia con sus pagos',
+        icon: UserCheck,
+        accent: 'border-[#d7f7e7]',
+        badgeTone: 'bg-[#d8fae8] text-emerald-700',
       },
       {
         title: 'Usuarios no habilitados',
         value: formatCount(noHabilitados),
-        note: 'Requieren regularizar cuota vigente',
-        accent: 'border-amber-400',
-        noteTone: 'text-amber-600',
+        note: formatCount(noHabilitados),
+        helper: 'Requieren regularizar sus pagos',
+        icon: UserMinus,
+        accent: 'border-[#ffe9b5]',
+        badgeTone: 'bg-[#fff1c9] text-amber-700',
       },
     ]
   }, [rows])
@@ -232,9 +319,6 @@ function ColegiadosPage() {
     const start = (safePage - 1) * itemsPerPage
     return filteredRows.slice(start, start + itemsPerPage)
   }, [filteredRows, safePage])
-
-  const selectedRowColegiado =
-    rows.find((colegiado) => colegiado.id === selectedRowId) ?? null
 
   const handleFilterChange = (filter) => {
     setActiveFilter(filter)
@@ -253,15 +337,27 @@ function ColegiadosPage() {
   }
 
   const openCreateModal = () => {
+    setFormMode('create')
+    setShouldReturnToDetail(false)
+    setErrorMessage('')
     setFormValues(emptyForm)
     setPhotoPreview('')
     setIsCreateModalOpen(true)
   }
 
   const closeCreateModal = () => {
+    const shouldReopenDetail =
+      formMode === 'edit' && shouldReturnToDetail && Boolean(selectedColegiado)
+
     setIsCreateModalOpen(false)
+    setFormMode('create')
+    setShouldReturnToDetail(false)
     setFormValues(emptyForm)
     setPhotoPreview('')
+
+    if (shouldReopenDetail) {
+      setIsDetailModalOpen(true)
+    }
   }
 
   const openDetailModal = (colegiado) => {
@@ -271,6 +367,17 @@ function ColegiadosPage() {
 
   const closeDetailModal = () => {
     setIsDetailModalOpen(false)
+  }
+
+  const openEditModal = (colegiado, options = {}) => {
+    setSelectedColegiado(colegiado)
+    setFormMode('edit')
+    setShouldReturnToDetail(Boolean(options.returnToDetail))
+    setErrorMessage('')
+    setFormValues(buildFormValuesFromColegiado(colegiado))
+    setPhotoPreview(colegiado.photo ?? '')
+    setIsDetailModalOpen(false)
+    setIsCreateModalOpen(true)
   }
 
   const openEspecialidadesModal = (colegiado) => {
@@ -296,12 +403,18 @@ function ColegiadosPage() {
     setIsDeleteModalOpen(false)
   }
 
-  const handleSelectRow = (colegiadoId) => {
-    setSelectedRowId((current) => (current === colegiadoId ? null : colegiadoId))
-  }
-
   const handleInputChange = (event) => {
-    const { name, value } = event.target
+    const { name } = event.target
+    let { value } = event.target
+
+    if (name === 'dni') {
+      value = normalizeDniInput(value)
+    }
+
+    if (name === 'celular') {
+      value = normalizeCelularInput(value)
+    }
+
     setFormValues((current) => ({
       ...current,
       [name]: value,
@@ -352,51 +465,69 @@ function ColegiadosPage() {
     })
   }
 
-  const handleCreateColegiado = async (event) => {
+  const handleSubmitColegiado = async (event) => {
     event.preventDefault()
+
+    const isEditMode = formMode === 'edit' && selectedColegiado
+
     setIsSubmitting(true)
     setErrorMessage('')
 
     try {
-      const response = await fetch(`${API_BASE_URL}/colegiados`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
+      const response = await fetch(
+        isEditMode
+          ? `${API_BASE_URL}/colegiados/${selectedColegiado.id}`
+          : `${API_BASE_URL}/colegiados`,
+        {
+          method: isEditMode ? 'PUT' : 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include',
+          body: JSON.stringify(buildColegiadoPayload(formValues)),
         },
-        credentials: 'include',
-        body: JSON.stringify({
-          nombre: formValues.nombres.trim(),
-          apellidoPaterno: formValues.apellidoPaterno.trim(),
-          apellidoMaterno: formValues.apellidoMaterno.trim(),
-          dni: formValues.dni.trim(),
-          sexo: formValues.sexo,
-          fechaNacimiento: formValues.fechaNacimiento,
-          ruc: formValues.ruc.trim(),
-          celular: formValues.telefono.trim(),
-          email: formValues.email.trim(),
-          direccion: formValues.direccion.trim(),
-          fotoUrl: formValues.fotoUrl,
-        }),
-      })
+      )
 
       if (!response.ok) {
         const payload = await response.json().catch(() => null)
         const details = Array.isArray(payload?.details) ? payload.details.join(' ') : ''
         throw new Error(
-          details || payload?.message || 'No se pudo registrar el colegiado en el backend.',
+          details ||
+            payload?.message ||
+            (isEditMode
+              ? 'No se pudieron guardar los cambios del colegiado.'
+              : 'No se pudo registrar el colegiado en el backend.'),
         )
       }
 
-      await loadColegiados()
-      setActiveFilter('Todos')
-      setSearchTerm('')
-      setCurrentPage(1)
+      const savedColegiado = mapColegiadoToRow(await response.json())
+
+      if (isEditMode) {
+        setRows((current) =>
+          current.map((colegiado) =>
+            colegiado.id === savedColegiado.id ? savedColegiado : colegiado,
+          ),
+        )
+        setSelectedColegiado(savedColegiado)
+
+        if (shouldReturnToDetail) {
+          setIsDetailModalOpen(true)
+        }
+      } else {
+        await loadColegiados()
+        setActiveFilter('Todos')
+        setSearchTerm('')
+        setCurrentPage(1)
+      }
+
       closeCreateModal()
     } catch (error) {
       setErrorMessage(
         error instanceof Error
           ? error.message
-          : 'No se pudo registrar el colegiado en el backend.',
+          : isEditMode
+            ? 'No se pudieron guardar los cambios del colegiado.'
+            : 'No se pudo registrar el colegiado en el backend.',
       )
     } finally {
       setIsSubmitting(false)
@@ -484,9 +615,6 @@ function ColegiadosPage() {
       setRows((current) =>
         current.filter((colegiado) => colegiado.id !== selectedColegiado.id),
       )
-      setSelectedRowId((current) =>
-        current === selectedColegiado.id ? null : current,
-      )
       setIsDeleteModalOpen(false)
       setIsDetailModalOpen(false)
       setSelectedColegiado(null)
@@ -503,6 +631,7 @@ function ColegiadosPage() {
 
   useEffect(() => {
     loadColegiados()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
@@ -578,15 +707,36 @@ function ColegiadosPage() {
           {summaryCards.map((card) => (
             <article
               key={card.title}
-              className={`rounded-[26px] border border-slate-200 bg-[#fdfefe] p-6 shadow-[0_16px_34px_-30px_rgba(15,23,42,0.55)] ${card.accent}`}
+              className={`rounded-[26px] border bg-white p-5 shadow-[0_14px_40px_-30px_rgba(15,23,42,0.5)] ${card.accent}`}
             >
-              <p className="text-xs font-bold uppercase tracking-[0.22em] text-slate-500">
-                {card.title}
-              </p>
-              <p className="mt-3 text-[2.25rem] font-bold tracking-tight text-slate-950">
-                {card.value}
-              </p>
-              <p className={`mt-2 text-sm font-medium ${card.noteTone}`}>{card.note}</p>
+              <div className="mb-5 flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-700">
+                    {card.title}
+                  </p>
+                </div>
+
+                <div className={`rounded-2xl p-3 ${card.badgeTone}`}>
+                  <card.icon size={20} strokeWidth={2.2} />
+                </div>
+              </div>
+
+              <div className="flex items-end justify-between gap-4">
+                <p className="text-3xl font-bold tracking-tight text-slate-950 sm:text-[2.15rem]">
+                  {card.value}
+                </p>
+
+                <div className="text-right">
+                  <span
+                    className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${card.badgeTone}`}
+                  >
+                    {card.note}
+                  </span>
+                  <p className="mt-2 max-w-[10rem] text-xs leading-5 text-slate-500">
+                    {card.helper}
+                  </p>
+                </div>
+              </div>
             </article>
           ))}
         </section>
@@ -649,33 +799,10 @@ function ColegiadosPage() {
               </div>
             </div>
 
-            <div className="flex flex-col gap-3 rounded-[24px] border border-slate-200 bg-[#f8fbff] px-4 py-4 lg:flex-row lg:items-center lg:justify-between">
-              <div className="space-y-1">
-                <p className="text-xs font-bold uppercase tracking-[0.22em] text-slate-500">
-                  Acciones de tabla
-                </p>
-                <p className="text-sm text-slate-600">
-                  {selectedRowColegiado
-                    ? `Seleccionado: ${selectedRowColegiado.name}`
-                    : 'Selecciona un colegiado en la tabla para habilitar la eliminacion.'}
-                </p>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => openDeleteModal(selectedRowColegiado)}
-                disabled={!selectedRowColegiado}
-                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[linear-gradient(135deg,#b91c1c_0%,#ef4444_100%)] px-5 py-3 text-sm font-semibold text-white shadow-[0_18px_34px_-24px_rgba(185,28,28,0.85)] transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <Trash2 size={16} strokeWidth={2.2} />
-                Eliminar colegiado
-              </button>
-            </div>
           </div>
 
           <div className="mt-5 overflow-hidden rounded-[26px] border border-slate-200">
-            <div className="hidden grid-cols-[84px_1.05fr_1fr_2fr_1.7fr_1.2fr_112px] bg-[#e8f0ff] px-6 py-4 text-[11px] font-bold uppercase tracking-[0.22em] text-slate-500 lg:grid">
-              <span>Sel.</span>
+            <div className="hidden grid-cols-[0.95fr_0.9fr_2.2fr_1.6fr_1.1fr_148px] bg-[#e8f0ff] px-6 py-4 text-[11px] font-bold uppercase tracking-[0.22em] text-slate-500 lg:grid">
               <span>Codigo</span>
               <span>DNI</span>
               <span>Nombre completo</span>
@@ -693,30 +820,8 @@ function ColegiadosPage() {
                 paginatedRows.map((colegiado) => (
                   <div
                     key={colegiado.id}
-                    className={`grid gap-4 px-4 py-5 transition lg:grid-cols-[84px_1.05fr_1fr_2fr_1.7fr_1.2fr_112px] lg:items-center lg:px-6 ${
-                      selectedRowId === colegiado.id ? 'bg-[#f8fbff]' : ''
-                    }`}
+                    className="grid gap-4 px-4 py-5 transition hover:bg-[#f8fbff] lg:grid-cols-[0.95fr_0.9fr_2.2fr_1.6fr_1.1fr_148px] lg:items-center lg:px-6"
                   >
-                    <div>
-                      <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-400 lg:hidden">
-                        Seleccion
-                      </p>
-                      <button
-                        type="button"
-                        aria-label={`Seleccionar a ${colegiado.name}`}
-                        onClick={() => handleSelectRow(colegiado.id)}
-                        className={`inline-flex h-11 w-11 items-center justify-center rounded-2xl border transition ${
-                          selectedRowId === colegiado.id
-                            ? 'border-cobalt bg-cobalt text-white shadow-[0_12px_24px_-18px_rgba(23,57,166,0.95)]'
-                            : 'border-slate-200 bg-white text-slate-400 hover:border-cobalt hover:text-cobalt'
-                        }`}
-                      >
-                        <span className="text-[11px] font-bold uppercase tracking-[0.18em]">
-                          {selectedRowId === colegiado.id ? 'OK' : 'Sel'}
-                        </span>
-                      </button>
-                    </div>
-
                     <div>
                       <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-400 lg:hidden">
                         Codigo
@@ -739,42 +844,27 @@ function ColegiadosPage() {
                       <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-400 lg:hidden">
                         Nombre completo
                       </p>
-                      <div className="flex items-center gap-3">
-                        {colegiado.photo ? (
-                          <img
-                            src={colegiado.photo}
-                            alt={`Foto de ${colegiado.name}`}
-                            className="h-10 w-10 shrink-0 rounded-full object-cover"
-                          />
-                        ) : (
-                          <div
-                            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white ${colegiado.avatarTone}`}
-                          >
-                            {colegiado.initials}
+                      <div className="space-y-1">
+                        <p className="max-w-[17rem] font-semibold leading-6 text-slate-900">
+                          {colegiado.name}
+                        </p>
+                        {colegiado.especialidades.length > 0 ? (
+                          <div className="flex flex-wrap gap-2">
+                            {colegiado.especialidades.slice(0, 2).map((especialidad) => (
+                              <span
+                                key={especialidad}
+                                className="rounded-full bg-[#eef4ff] px-2.5 py-1 text-[11px] font-semibold text-cobalt"
+                              >
+                                {especialidad}
+                              </span>
+                            ))}
+                            {colegiado.especialidades.length > 2 ? (
+                              <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-500">
+                                +{colegiado.especialidades.length - 2}
+                              </span>
+                            ) : null}
                           </div>
-                        )}
-                        <div className="space-y-1">
-                          <p className="max-w-[17rem] font-semibold leading-6 text-slate-900">
-                            {colegiado.name}
-                          </p>
-                          {colegiado.especialidades.length > 0 ? (
-                            <div className="flex flex-wrap gap-2">
-                              {colegiado.especialidades.slice(0, 2).map((especialidad) => (
-                                <span
-                                  key={especialidad}
-                                  className="rounded-full bg-[#eef4ff] px-2.5 py-1 text-[11px] font-semibold text-cobalt"
-                                >
-                                  {especialidad}
-                                </span>
-                              ))}
-                              {colegiado.especialidades.length > 2 ? (
-                                <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-500">
-                                  +{colegiado.especialidades.length - 2}
-                                </span>
-                              ) : null}
-                            </div>
-                          ) : null}
-                        </div>
+                        ) : null}
                       </div>
                     </div>
 
@@ -810,12 +900,21 @@ function ColegiadosPage() {
                       </button>
                       <button
                         type="button"
-                        aria-label={`Editar especialidades de ${colegiado.name}`}
-                        title="Editar especialidades"
-                        onClick={() => openEspecialidadesModal(colegiado)}
+                        aria-label={`Editar datos de ${colegiado.name}`}
+                        title="Editar colegiado"
+                        onClick={() => openEditModal(colegiado)}
                         className="inline-flex h-10 w-10 items-center justify-center rounded-2xl text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
                       >
                         <PencilLine size={18} strokeWidth={2.1} />
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={`Eliminar a ${colegiado.name}`}
+                        title="Eliminar colegiado"
+                        onClick={() => openDeleteModal(colegiado)}
+                        className="inline-flex h-10 w-10 items-center justify-center rounded-2xl text-red-400 transition hover:bg-red-50 hover:text-red-600"
+                      >
+                        <Trash2 size={18} strokeWidth={2.1} />
                       </button>
                     </div>
                   </div>
@@ -891,18 +990,19 @@ function ColegiadosPage() {
 
       {isCreateModalOpen ? (
         <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/45 px-4 py-8 backdrop-blur-sm">
-          <div className="w-full max-w-4xl rounded-[32px] border border-white/80 bg-[linear-gradient(180deg,#f8fbff_0%,#ffffff_100%)] shadow-[0_24px_70px_-36px_rgba(15,23,42,0.8)]">
+          <div className="w-full max-w-5xl rounded-[32px] border border-white/80 bg-[linear-gradient(180deg,#f8fbff_0%,#ffffff_100%)] shadow-[0_24px_70px_-36px_rgba(15,23,42,0.8)]">
             <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-6 py-5 sm:px-8">
               <div>
                 <p className="text-xs font-bold uppercase tracking-[0.24em] text-cobalt">
-                  Registro Manual
+                  {isEditMode ? 'Actualizacion de datos' : 'Registro Manual'}
                 </p>
                 <h2 className="mt-2 text-2xl font-bold tracking-tight text-slate-950">
-                  Nuevo colegiado
+                  {isEditMode ? 'Editar colegiado' : 'Nuevo colegiado'}
                 </h2>
                 <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-                  Registra los datos base del colegiado y deja lista su informacion
-                  para validacion posterior.
+                  {isEditMode
+                    ? 'Corrige o actualiza la informacion del colegiado sin alterar su codigo de colegiatura.'
+                    : 'Registra los datos base del colegiado y deja lista su informacion para validacion posterior.'}
                 </p>
               </div>
 
@@ -916,8 +1016,14 @@ function ColegiadosPage() {
               </button>
             </div>
 
-            <form onSubmit={handleCreateColegiado} className="space-y-6 px-6 py-6 sm:px-8 sm:py-7">
-              <div className="grid gap-6 lg:grid-cols-[280px_1fr]">
+            <form onSubmit={handleSubmitColegiado} className="space-y-6 px-6 py-6 sm:px-8 sm:py-7">
+              {errorMessage ? (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+                  {errorMessage}
+                </div>
+              ) : null}
+
+              <div className="grid gap-6 lg:grid-cols-[300px_1fr]">
                 <div className="rounded-[28px] border border-slate-200 bg-[#f4f7ff] p-5">
                   <p className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">
                     Foto del colegiado
@@ -957,8 +1063,26 @@ function ColegiadosPage() {
                   </div>
                 </div>
 
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <label className="space-y-2 sm:col-span-2">
+                <div className="grid gap-4 lg:grid-cols-3">
+                  {isEditMode && selectedColegiado ? (
+                    <label className="space-y-2 lg:col-span-3">
+                      <span className="text-sm font-semibold text-slate-700">
+                        Codigo de colegiatura
+                      </span>
+                      <input
+                        type="text"
+                        value={selectedColegiado.code}
+                        readOnly
+                        disabled
+                        className="w-full cursor-not-allowed rounded-2xl border border-slate-200 bg-slate-100 px-4 py-3 text-sm font-medium text-slate-500 outline-none"
+                      />
+                      <span className="block text-xs text-slate-500">
+                        Este codigo es correlativo y se genera automaticamente.
+                      </span>
+                    </label>
+                  ) : null}
+
+                  <label className="space-y-2 lg:col-span-3">
                     <span className="text-sm font-semibold text-slate-700">Nombres</span>
                     <input
                       type="text"
@@ -1047,6 +1171,20 @@ function ColegiadosPage() {
 
                   <label className="space-y-2">
                     <span className="text-sm font-semibold text-slate-700">
+                      Fecha de iniciacion
+                    </span>
+                    <input
+                      type="date"
+                      name="fechaIniciacion"
+                      value={formValues.fechaIniciacion}
+                      onChange={handleInputChange}
+                      required
+                      className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-cobalt"
+                    />
+                  </label>
+
+                  <label className="space-y-2 lg:col-span-1">
+                    <span className="text-sm font-semibold text-slate-700">
                       RUC (opcional)
                     </span>
                     <input
@@ -1059,43 +1197,45 @@ function ColegiadosPage() {
                     />
                   </label>
 
-                  <label className="space-y-2">
-                    <span className="text-sm font-semibold text-slate-700">Telefono</span>
+                  <label className="space-y-2 lg:col-span-2">
+                    <span className="text-sm font-semibold text-slate-700">Celular</span>
                     <input
                       type="tel"
-                      name="telefono"
-                      value={formValues.telefono}
+                      name="celular"
+                      value={formValues.celular}
                       onChange={handleInputChange}
                       required
-                      placeholder="999 999 999"
+                      placeholder="+51999999999"
                       className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-cobalt"
                     />
                   </label>
 
-                  <label className="space-y-2 sm:col-span-2">
-                    <span className="text-sm font-semibold text-slate-700">Direccion</span>
-                    <input
-                      type="text"
-                      name="direccion"
-                      value={formValues.direccion}
-                      onChange={handleInputChange}
-                      placeholder="Direccion del colegiado"
-                      className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-cobalt"
-                    />
-                  </label>
+                  <div className="grid gap-4 lg:col-span-3 lg:grid-cols-2">
+                    <label className="space-y-2">
+                      <span className="text-sm font-semibold text-slate-700">Direccion</span>
+                      <input
+                        type="text"
+                        name="direccion"
+                        value={formValues.direccion}
+                        onChange={handleInputChange}
+                        placeholder="Direccion del colegiado"
+                        className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-cobalt"
+                      />
+                    </label>
 
-                  <label className="space-y-2 sm:col-span-2">
-                    <span className="text-sm font-semibold text-slate-700">Email</span>
-                    <input
-                      type="email"
-                      name="email"
-                      value={formValues.email}
-                      onChange={handleInputChange}
-                      required
-                      placeholder="colegiado@correo.com"
-                      className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-cobalt"
-                    />
-                  </label>
+                    <label className="space-y-2">
+                      <span className="text-sm font-semibold text-slate-700">Email</span>
+                      <input
+                        type="email"
+                        name="email"
+                        value={formValues.email}
+                        onChange={handleInputChange}
+                        required
+                        placeholder="colegiado@correo.com"
+                        className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-cobalt"
+                      />
+                    </label>
+                  </div>
                 </div>
               </div>
 
@@ -1112,7 +1252,13 @@ function ColegiadosPage() {
                   disabled={isSubmitting}
                   className="inline-flex items-center justify-center rounded-2xl bg-[linear-gradient(135deg,#1739a6_0%,#204edc_100%)] px-5 py-3 text-sm font-semibold text-white shadow-[0_18px_34px_-24px_rgba(30,64,175,0.95)] transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-70"
                 >
-                  {isSubmitting ? 'Registrando...' : 'Registrar colegiado'}
+                  {isSubmitting
+                    ? isEditMode
+                      ? 'Guardando cambios...'
+                      : 'Registrando...'
+                    : isEditMode
+                      ? 'Guardar cambios'
+                      : 'Registrar colegiado'}
                 </button>
               </div>
             </form>
@@ -1209,7 +1355,7 @@ function ColegiadosPage() {
 
       {isDetailModalOpen && selectedColegiado ? (
         <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/45 px-4 py-8 backdrop-blur-sm">
-          <div className="w-full max-w-3xl rounded-[32px] border border-white/80 bg-white shadow-[0_24px_70px_-36px_rgba(15,23,42,0.8)]">
+          <div className="w-full max-w-5xl rounded-[32px] border border-white/80 bg-white shadow-[0_24px_70px_-36px_rgba(15,23,42,0.8)]">
             <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-6 py-5 sm:px-8">
               <div>
                 <p className="text-xs font-bold uppercase tracking-[0.24em] text-cobalt">
@@ -1234,32 +1380,70 @@ function ColegiadosPage() {
             </div>
 
             <div className="space-y-6 px-6 py-6 sm:px-8 sm:py-7">
-              <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
-                {selectedColegiado.photo ? (
-                  <img
-                    src={selectedColegiado.photo}
-                    alt={`Foto de ${selectedColegiado.name}`}
-                    className="h-24 w-24 rounded-[28px] object-cover"
-                  />
-                ) : (
-                  <div
-                    className={`flex h-24 w-24 items-center justify-center rounded-[28px] text-2xl font-bold text-white ${selectedColegiado.avatarTone}`}
-                  >
-                    {selectedColegiado.initials}
-                  </div>
-                )}
+              <div className="grid gap-4 lg:grid-cols-3">
+                <article className="rounded-[28px] border border-slate-200 bg-[#f8fbff] p-5">
+                  <div className="flex items-center gap-5">
+                    {selectedColegiado.photo ? (
+                      <img
+                        src={selectedColegiado.photo}
+                        alt={`Foto de ${selectedColegiado.name}`}
+                        className="h-24 w-24 shrink-0 rounded-[28px] object-cover"
+                      />
+                    ) : (
+                      <div
+                        className={`flex h-24 w-24 shrink-0 items-center justify-center rounded-[28px] text-2xl font-bold text-white ${selectedColegiado.avatarTone}`}
+                      >
+                        {selectedColegiado.initials}
+                      </div>
+                    )}
 
-                <div className="space-y-2">
-                  <span
-                    className={`inline-flex rounded-full px-4 py-2 text-sm font-semibold ${selectedColegiado.statusTone}`}
-                  >
-                    {selectedColegiado.status}
-                  </span>
-                  <p className="text-sm text-slate-500">{selectedColegiado.vigencia}</p>
-                </div>
+                    <div className="space-y-2">
+                      <span
+                        className={`inline-flex rounded-full px-4 py-2 text-sm font-semibold ${selectedColegiado.statusTone}`}
+                      >
+                        {selectedColegiado.status}
+                      </span>
+                      <p className="text-sm text-slate-500">{selectedColegiado.vigencia}</p>
+                    </div>
+                  </div>
+                </article>
+
+                <article className="rounded-[28px] border border-slate-200 bg-[#f8fbff] p-5">
+                  <p className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">
+                    Edad
+                  </p>
+                  <p className="mt-3 text-3xl font-bold tracking-tight text-slate-950">
+                    {calculateAge(selectedColegiado.fechaNacimiento)}
+                  </p>
+                  <p className="mt-2 text-sm font-medium text-cobalt">
+                    Cumpleaños: {formatBirthdayMonthDay(selectedColegiado.fechaNacimiento)}
+                  </p>
+                </article>
+
+                <article className="rounded-[28px] border border-slate-200 bg-[#f8fbff] p-5">
+                  <p className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">
+                    Especialidades
+                  </p>
+                  <div className="mt-4 flex flex-wrap gap-3">
+                    {selectedColegiado.especialidades.length > 0 ? (
+                      selectedColegiado.especialidades.map((especialidad) => (
+                        <span
+                          key={especialidad}
+                          className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-cobalt shadow-[0_8px_18px_-14px_rgba(23,57,166,0.8)]"
+                        >
+                          {especialidad}
+                        </span>
+                      ))
+                    ) : (
+                      <p className="text-sm text-slate-500">
+                        Este colegiado aun no tiene especialidades registradas.
+                      </p>
+                    )}
+                  </div>
+                </article>
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid gap-4 lg:grid-cols-3">
                 <article className="rounded-[24px] border border-slate-200 bg-[#f8fbff] p-4">
                   <p className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">
                     Codigo de colegiatura
@@ -1275,6 +1459,15 @@ function ColegiadosPage() {
                   </p>
                   <p className="mt-2 text-sm font-semibold text-slate-900">
                     {selectedColegiado.dni}
+                  </p>
+                </article>
+
+                <article className="rounded-[24px] border border-slate-200 bg-white p-4">
+                  <p className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">
+                    Sexo
+                  </p>
+                  <p className="mt-2 text-sm font-semibold text-slate-900">
+                    {selectedColegiado.sexo}
                   </p>
                 </article>
 
@@ -1298,15 +1491,6 @@ function ColegiadosPage() {
 
                 <article className="rounded-[24px] border border-slate-200 bg-white p-4">
                   <p className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">
-                    Sexo
-                  </p>
-                  <p className="mt-2 text-sm font-semibold text-slate-900">
-                    {selectedColegiado.sexo}
-                  </p>
-                </article>
-
-                <article className="rounded-[24px] border border-slate-200 bg-white p-4">
-                  <p className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">
                     Fecha de nacimiento
                   </p>
                   <p className="mt-2 text-sm font-semibold text-slate-900">
@@ -1316,7 +1500,16 @@ function ColegiadosPage() {
 
                 <article className="rounded-[24px] border border-slate-200 bg-white p-4">
                   <p className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">
-                    Telefono
+                    Fecha de iniciacion
+                  </p>
+                  <p className="mt-2 text-sm font-semibold text-slate-900">
+                    {formatDate(selectedColegiado.fechaIniciacion)}
+                  </p>
+                </article>
+
+                <article className="rounded-[24px] border border-slate-200 bg-white p-4">
+                  <p className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">
+                    Celular
                   </p>
                   <p className="mt-2 text-sm font-semibold text-slate-900">
                     {selectedColegiado.celular}
@@ -1332,16 +1525,7 @@ function ColegiadosPage() {
                   </p>
                 </article>
 
-                <article className="rounded-[24px] border border-slate-200 bg-white p-4 sm:col-span-2">
-                  <p className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">
-                    Email
-                  </p>
-                  <p className="mt-2 text-sm font-semibold text-slate-900">
-                    {selectedColegiado.email}
-                  </p>
-                </article>
-
-                <article className="rounded-[24px] border border-slate-200 bg-white p-4 sm:col-span-2">
+                <article className="rounded-[24px] border border-slate-200 bg-white p-4 lg:col-span-1">
                   <p className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">
                     Direccion
                   </p>
@@ -1349,29 +1533,33 @@ function ColegiadosPage() {
                     {selectedColegiado.direccion}
                   </p>
                 </article>
+
+                <article className="rounded-[24px] border border-slate-200 bg-white p-4 lg:col-span-1">
+                  <p className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">
+                    Email
+                  </p>
+                  <p className="mt-2 text-sm font-semibold text-slate-900">
+                    {selectedColegiado.email}
+                  </p>
+                </article>
               </div>
 
-              <article className="rounded-[28px] border border-slate-200 bg-[#f8fbff] p-5">
-                <p className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">
-                  Especialidades
-                </p>
-                <div className="mt-4 flex flex-wrap gap-3">
-                  {selectedColegiado.especialidades.length > 0 ? (
-                    selectedColegiado.especialidades.map((especialidad) => (
-                      <span
-                        key={especialidad}
-                        className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-cobalt shadow-[0_8px_18px_-14px_rgba(23,57,166,0.8)]"
-                      >
-                        {especialidad}
-                      </span>
-                    ))
-                  ) : (
-                    <p className="text-sm text-slate-500">
-                      Este colegiado aun no tiene especialidades registradas.
-                    </p>
-                  )}
-                </div>
-              </article>
+              <div className="flex flex-col-reverse gap-3 border-t border-slate-200 pt-5 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  onClick={() => openEspecialidadesModal(selectedColegiado)}
+                  className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-900"
+                >
+                  Editar especialidades
+                </button>
+                <button
+                  type="button"
+                  onClick={() => openEditModal(selectedColegiado, { returnToDetail: true })}
+                  className="inline-flex items-center justify-center rounded-2xl bg-[linear-gradient(135deg,#1739a6_0%,#204edc_100%)] px-5 py-3 text-sm font-semibold text-white shadow-[0_18px_34px_-24px_rgba(30,64,175,0.95)] transition hover:-translate-y-0.5"
+                >
+                  Editar datos
+                </button>
+              </div>
             </div>
           </div>
         </div>

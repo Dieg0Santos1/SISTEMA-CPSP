@@ -9,6 +9,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import java.math.BigDecimal;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -35,4 +36,19 @@ public class CobroDetalle extends AuditableEntity {
 
   @Column(name = "periodo_referencia", length = 80)
   private String periodoReferencia;
+
+  @Column(nullable = false)
+  private Integer cantidad;
+
+  @Column(name = "monto_unitario", nullable = false, precision = 10, scale = 2)
+  private BigDecimal montoUnitario;
+
+  @Column(nullable = false, precision = 10, scale = 2)
+  private BigDecimal descuento;
+
+  @Column(nullable = false, precision = 10, scale = 2)
+  private BigDecimal mora;
+
+  @Column(name = "total_linea", nullable = false, precision = 10, scale = 2)
+  private BigDecimal totalLinea;
 }
