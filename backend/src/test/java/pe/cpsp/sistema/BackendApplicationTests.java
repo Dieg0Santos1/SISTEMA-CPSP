@@ -47,7 +47,9 @@ class BackendApplicationTests {
 						"FECHA_INICIACION",
 						"SEXO",
 						"DIRECCION",
-						"CELULAR")
+						"CELULAR",
+						"RUC",
+						"FOTO_URL")
 				.doesNotContain("CODIGO", "NOMBRES", "APELLIDOS", "TELEFONO");
 
 		Integer totalMigratedRows =
@@ -63,6 +65,35 @@ class BackendApplicationTests {
 						Integer.class);
 
 		assertThat(totalMigratedRows).isEqualTo(3);
+	}
+
+	@Test
+	void colegiadoSeedPaymentsSupportHabilitacionRule() {
+		Integer totalPagosQueAfectanHabilitacion =
+				jdbcTemplate.queryForObject(
+						"""
+						SELECT COUNT(*)
+						FROM cobro_detalle detalle
+						INNER JOIN concepto_cobro concepto
+						  ON concepto.id = detalle.concepto_cobro_id
+						WHERE concepto.afecta_habilitacion = TRUE
+						""",
+						Integer.class);
+
+		assertThat(totalPagosQueAfectanHabilitacion).isEqualTo(4);
+	}
+
+	@Test
+	void colegiadoEspecialidadesSeededForDetailViews() {
+		Integer totalEspecialidades =
+				jdbcTemplate.queryForObject(
+						"""
+						SELECT COUNT(*)
+						FROM colegiado_especialidad
+						""",
+						Integer.class);
+
+		assertThat(totalEspecialidades).isEqualTo(4);
 	}
 
 }

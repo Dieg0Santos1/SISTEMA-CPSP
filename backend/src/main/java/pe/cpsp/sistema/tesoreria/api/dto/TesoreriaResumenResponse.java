@@ -1,10 +1,14 @@
 package pe.cpsp.sistema.tesoreria.api.dto;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 public record TesoreriaResumenResponse(
-    long conceptosActivos,
-    long seriesActivas,
-    long conceptosQueAfectanHabilitacion,
-    long conceptosExoneradosIgv,
-    List<ComprobanteSerieResponse> seriesDisponibles) {}
+    BigDecimal recaudacionDia,
+    long operacionesDia,
+    long pendientesUrgentes,
+    long comprobantesEmitidos,
+    long boletasNoImpresas,
+    List<ResumenCanalResponse> canalesDia,
+    List<ResumenCajaResponse> estadoCaja,
+    List<OperacionTesoreriaResponse> ultimasOperaciones) {}

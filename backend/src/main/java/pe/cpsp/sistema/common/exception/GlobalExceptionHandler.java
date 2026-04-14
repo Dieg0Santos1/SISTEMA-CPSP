@@ -3,6 +3,7 @@ package pe.cpsp.sistema.common.exception;
 import jakarta.servlet.http.HttpServletRequest;
 import java.time.OffsetDateTime;
 import java.util.List;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
@@ -21,6 +22,20 @@ public class GlobalExceptionHandler {
         HttpStatus.NOT_FOUND, exception.getMessage(), request.getRequestURI(), List.of());
   }
 
+  @ExceptionHandler(DuplicateResourceException.class)
+  public ResponseEntity<ApiErrorResponse> handleConflict(
+      DuplicateResourceException exception, HttpServletRequest request) {
+    return buildResponse(
+        HttpStatus.CONFLICT, exception.getMessage(), request.getRequestURI(), List.of());
+  }
+
+  @ExceptionHandler(InvalidRequestException.class)
+  public ResponseEntity<ApiErrorResponse> handleBadRequest(
+      InvalidRequestException exception, HttpServletRequest request) {
+    return buildResponse(
+        HttpStatus.BAD_REQUEST, exception.getMessage(), request.getRequestURI(), List.of());
+  }
+
   @ExceptionHandler(MethodArgumentNotValidException.class)
   public ResponseEntity<ApiErrorResponse> handleValidation(
       MethodArgumentNotValidException exception, HttpServletRequest request) {
@@ -34,6 +49,19 @@ public class GlobalExceptionHandler {
         "La solicitud contiene datos invalidos.",
         request.getRequestURI(),
         details);
+  }
+
+  @ExceptionHandler(DataIntegrityViolationException.class)
+  public ResponseEntity<ApiErrorResponse> handleDataIntegrity(
+      DataIntegrityViolationException exception, HttpServletRequest request) {
+    String message =
+        exception.getMostSpecificCause() != null
+                && exception.getMostSpecificCause().getMessage() != null
+                && exception.getMostSpecificCause().getMessage().toLowerCase().contains("foto_url")
+            ? "La foto es demasiado grande para guardarse. Usa una imagen mas ligera."
+            : "No se pudo guardar la informacion enviada por una restriccion de datos.";
+
+    return buildResponse(HttpStatus.BAD_REQUEST, message, request.getRequestURI(), List.of());
   }
 
   @ExceptionHandler(Exception.class)
