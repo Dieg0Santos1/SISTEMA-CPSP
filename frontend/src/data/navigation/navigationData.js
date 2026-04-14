@@ -17,9 +17,9 @@ export const navigationItems = [
   { label: 'Caja y Cobros', icon: CreditCard, path: '/caja-cobros' },
   { label: 'Conceptos de Cobro', icon: FileText, path: '/conceptos-cobro' },
   { label: 'Reportes', icon: BarChart3 },
-  { label: 'Eventos', icon: CalendarDays },
-  { label: 'Inventario', icon: FolderKanban },
-  { label: 'Elecciones', icon: Vote },
+  { label: 'Eventos', icon: CalendarDays, path: '/eventos' },
+  { label: 'Inventario', icon: FolderKanban, path: '/inventario' },
+  { label: 'Elecciones', icon: Vote, path: '/elecciones' },
   { label: 'Tribunal', icon: Gavel, path: '/tribunal' },
 ]
 

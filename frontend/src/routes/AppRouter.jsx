@@ -4,12 +4,15 @@ import ColegiadosPage from '../pages/ColegiadosPage'
 import CobrosPage from '../pages/CobrosPage'
 import ConceptosPage from '../pages/ConceptosPage'
 import DashboardPage from '../pages/DashboardPage'
+import EventosPage from '../pages/EventosPage'
+import InventarioPage from '../pages/InventarioPage'
 import TribunalPage from '../pages/TribunalPage'
 import CobrosComprobantesPage from '../pages/cobros/CobrosComprobantesPage'
 import CobrosHistorialPage from '../pages/cobros/CobrosHistorialPage'
 import CobrosPendientesPage from '../pages/cobros/CobrosPendientesPage'
 import CobrosRegistrarPage from '../pages/cobros/CobrosRegistrarPage'
 import CobrosResumenPage from '../pages/cobros/CobrosResumenPage'
+import EleccionesPage from '../pages/eventos/EleccionesPage'
 
 function AdminShell() {
   return (
@@ -33,9 +36,14 @@ function AppRouter() {
           <Route path="historial" element={<CobrosHistorialPage />} />
           <Route path="comprobantes" element={<CobrosComprobantesPage />} />
         </Route>
+        <Route path="/eventos" element={<EventosPage />} />
+        <Route path="/inventario" element={<InventarioPage />} />
+        <Route path="/elecciones" element={<EleccionesPage />} />
         <Route path="/conceptos-cobro" element={<ConceptosPage />} />
         <Route path="/tribunal" element={<TribunalPage />} />
       </Route>
+      <Route path="/eventos/gestion" element={<Navigate to="/eventos" replace />} />
+      <Route path="/eventos/elecciones" element={<Navigate to="/elecciones" replace />} />
       <Route path="/pagos" element={<Navigate to="/caja-cobros/registrar" replace />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
