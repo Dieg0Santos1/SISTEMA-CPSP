@@ -1,7 +1,6 @@
 export const cobrosModuleTabs = [
   { label: 'Resumen', path: '/caja-cobros/resumen' },
   { label: 'Registrar cobro', path: '/caja-cobros/registrar' },
-  { label: 'Pendientes', path: '/caja-cobros/pendientes' },
   { label: 'Historial', path: '/caja-cobros/historial' },
   { label: 'Comprobantes', path: '/caja-cobros/comprobantes' },
 ]
@@ -29,11 +28,11 @@ export const cobrosSummaryCards = [
     noteTone: 'text-emerald-600',
   },
   {
-    title: 'Observaciones de caja',
+    title: 'Bol. No Impresas',
     value: '3',
-    note: 'Operaciones pendientes de validacion',
-    accent: 'border-fuchsia-500',
-    noteTone: 'text-fuchsia-600',
+    note: 'Boletas listas para impresion',
+    accent: 'border-violet-400',
+    noteTone: 'text-violet-600',
   },
 ]
 
@@ -43,12 +42,6 @@ export const cobrosQuickActions = [
     description: 'Inicia una operacion nueva con seleccion de colegiado y conceptos.',
     path: '/caja-cobros/registrar',
     tone: 'bg-cobalt text-white',
-  },
-  {
-    title: 'Revisar pendientes',
-    description: 'Filtra deudas vencidas, por vencer y listas para cobranza.',
-    path: '/caja-cobros/pendientes',
-    tone: 'bg-white text-slate-900',
   },
   {
     title: 'Consultar historial',
@@ -81,23 +74,37 @@ export const cobrosCashSnapshot = [
     title: 'Caja principal',
     value: 'S/ 3,280.00',
     helper: '8 cobros en efectivo',
+    accent: 'bg-emerald-50 border-emerald-100',
+    titleTone: 'text-emerald-700',
   },
   {
     title: 'Transferencias',
     value: 'S/ 2,940.00',
     helper: '6 operaciones conciliadas',
+    accent: 'bg-[#eef4ff] border-[#d8e6ff]',
+    titleTone: 'text-cobalt',
   },
   {
     title: 'POS / Tarjeta',
     value: 'S/ 620.00',
     helper: '3 ventas confirmadas',
+    accent: 'bg-sky-50 border-sky-100',
+    titleTone: 'text-sky-600',
+  },
+  {
+    title: 'Yape / Plin',
+    value: 'S/ 860.00',
+    helper: '4 pagos inmediatos',
+    accent: 'bg-violet-50 border-violet-100',
+    titleTone: 'text-violet-600',
   },
 ]
 
 export const cobrosCollectionChannels = [
-  { label: 'Efectivo', value: 48, tone: 'bg-cobalt' },
-  { label: 'Transferencia', value: 43, tone: 'bg-sky-500' },
-  { label: 'POS / Tarjeta', value: 9, tone: 'bg-emerald-500' },
+  { label: 'Efectivo', value: 34, tone: 'bg-emerald-500', valueTone: 'text-emerald-600' },
+  { label: 'Transferencia', value: 28, tone: 'bg-cobalt', valueTone: 'text-cobalt' },
+  { label: 'POS / Tarjeta', value: 16, tone: 'bg-sky-400', valueTone: 'text-sky-500' },
+  { label: 'Yape / Plin', value: 22, tone: 'bg-violet-400', valueTone: 'text-violet-500' },
 ]
 
 export const cobrosMemberDirectory = [
@@ -166,8 +173,9 @@ export const cobrosOrigins = [
 
 export const cobrosPaymentMethods = [
   { label: 'Efectivo', active: true },
+  { label: 'Yape/Plin' },
   { label: 'Transferencia' },
-  { label: 'POS / Tarjeta' },
+  { label: 'POS/Tarjeta' },
 ]
 
 export const cobrosPeriodOptions = [
@@ -177,6 +185,12 @@ export const cobrosPeriodOptions = [
   'Abr 2026',
   'May 2026',
   'Jun 2026',
+  'Jul 2026',
+  'Ago 2026',
+  'Sep 2026',
+  'Oct 2026',
+  'Nov 2026',
+  'Dic 2026',
 ]
 
 export const cobrosConceptCatalog = [
@@ -398,16 +412,19 @@ export const cobrosHistorySummaryCards = [
     title: 'Hoy',
     value: 'S/ 6,840.00',
     helper: '17 operaciones',
+    tone: 'text-emerald-600',
   },
   {
     title: 'Ultimos 7 dias',
     value: 'S/ 24,560.00',
     helper: '66 operaciones registradas',
+    tone: 'text-fuchsia-600',
   },
   {
     title: 'Ticket promedio',
     value: 'S/ 145.20',
     helper: 'Sin incluir anulaciones',
+    tone: 'text-cobalt',
   },
 ]
 
@@ -441,7 +458,7 @@ export const cobrosHistoryRows = [
     date: '29 Mar 2026, 09:10 AM',
     memberName: 'Lucia Cardenas Montes',
     concept: 'Constancia de habilitacion',
-    method: 'POS / Tarjeta',
+    method: 'POS/Tarjeta',
     methodTone: 'bg-slate-100 text-slate-600',
     amount: 'S/ 25.00',
     document: 'B001-0029811',
@@ -467,16 +484,22 @@ export const cobrosReceiptSummaryCards = [
     title: 'Boletas emitidas',
     value: '29',
     helper: '25 emitidas hoy',
+    tone: 'text-cobalt',
+    accent: 'border-[#dbe5ff] bg-[linear-gradient(180deg,#ffffff_0%,#f4f8ff_100%)]',
   },
   {
     title: 'Recibos internos',
     value: '8',
     helper: 'Serie R001 activa',
+    tone: 'text-fuchsia-600',
+    accent: 'border-[#efd8ff] bg-[linear-gradient(180deg,#ffffff_0%,#fbf4ff_100%)]',
   },
   {
-    title: 'Pendientes de impresion',
+    title: 'No Impresas',
     value: '3',
     helper: 'Listos para reimpresion o descarga',
+    tone: 'text-amber-700',
+    accent: 'border-[#ffe7bf] bg-[linear-gradient(180deg,#ffffff_0%,#fff9ef_100%)]',
   },
 ]
 
@@ -504,6 +527,8 @@ export const cobrosReceiptRows = [
     issuedAt: '09 Abr 2026, 10:45 AM',
     status: 'Emitido',
     statusTone: 'bg-emerald-100 text-emerald-700',
+    printStatus: 'Impreso',
+    printTone: 'bg-[#dbe5ff] text-cobalt',
   },
   {
     id: 'receipt-02',
@@ -515,6 +540,8 @@ export const cobrosReceiptRows = [
     issuedAt: '04 Abr 2026, 03:20 PM',
     status: 'Emitido',
     statusTone: 'bg-emerald-100 text-emerald-700',
+    printStatus: 'No Impreso',
+    printTone: 'bg-rose-100 text-rose-700',
   },
   {
     id: 'receipt-03',
@@ -524,8 +551,10 @@ export const cobrosReceiptRows = [
     issuedTo: 'Flor de Maria Abad Quispe',
     amount: 'S/ 10.00',
     issuedAt: '28 Mar 2026, 05:42 PM',
-    status: 'Pendiente de validacion',
-    statusTone: 'bg-amber-100 text-amber-700',
+    status: 'Emitido',
+    statusTone: 'bg-emerald-100 text-emerald-700',
+    printStatus: 'Impreso',
+    printTone: 'bg-[#dbe5ff] text-cobalt',
   },
   {
     id: 'receipt-04',
@@ -535,7 +564,9 @@ export const cobrosReceiptRows = [
     issuedTo: 'Lucia Cardenas Montes',
     amount: 'S/ 25.00',
     issuedAt: '29 Mar 2026, 09:10 AM',
-    status: 'Disponible para descarga',
-    statusTone: 'bg-sky-100 text-sky-700',
+    status: 'Emitido',
+    statusTone: 'bg-emerald-100 text-emerald-700',
+    printStatus: 'No Impreso',
+    printTone: 'bg-rose-100 text-rose-700',
   },
 ]

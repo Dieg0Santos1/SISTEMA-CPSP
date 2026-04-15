@@ -9,7 +9,6 @@ import InventarioPage from '../pages/InventarioPage'
 import TribunalPage from '../pages/TribunalPage'
 import CobrosComprobantesPage from '../pages/cobros/CobrosComprobantesPage'
 import CobrosHistorialPage from '../pages/cobros/CobrosHistorialPage'
-import CobrosPendientesPage from '../pages/cobros/CobrosPendientesPage'
 import CobrosRegistrarPage from '../pages/cobros/CobrosRegistrarPage'
 import CobrosResumenPage from '../pages/cobros/CobrosResumenPage'
 import EleccionesPage from '../pages/eventos/EleccionesPage'
@@ -32,7 +31,6 @@ function AppRouter() {
           <Route index element={<Navigate to="resumen" replace />} />
           <Route path="resumen" element={<CobrosResumenPage />} />
           <Route path="registrar" element={<CobrosRegistrarPage />} />
-          <Route path="pendientes" element={<CobrosPendientesPage />} />
           <Route path="historial" element={<CobrosHistorialPage />} />
           <Route path="comprobantes" element={<CobrosComprobantesPage />} />
         </Route>

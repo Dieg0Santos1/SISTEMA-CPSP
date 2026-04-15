@@ -20,8 +20,7 @@ function CobrosPage() {
               </h1>
               <p className="mt-3 text-sm leading-7 text-slate-600 sm:text-base">
                 Modulo principal de tesoreria para monitorear caja, registrar operaciones,
-                gestionar pendientes y controlar comprobantes sin concentrarlo todo en una
-                sola pantalla.
+                revisar historial y controlar comprobantes.
               </p>
             </div>
 
