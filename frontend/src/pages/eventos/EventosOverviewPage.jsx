@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   CalendarClock,
   CalendarDays,
@@ -10,18 +10,20 @@ import {
   Users,
   X,
 } from 'lucide-react'
-import {
-  eventosInitialRecords,
-  eventosMockMembers,
-} from '../../data/eventos/eventosData'
 
-const EVENT_REFERENCE_DATE = new Date('2026-04-14T09:00:00')
+const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, '') ?? 'http://localhost:8080/api/v1'
 
 const emptyForm = {
   name: '',
   date: '',
   time: '',
   description: '',
+}
+
+const statusStyles = {
+  HABILITADO: 'bg-emerald-100 text-emerald-700',
+  NO_HABILITADO: 'bg-red-100 text-red-600',
 }
 
 const formatEventDate = (value) =>
@@ -40,28 +42,126 @@ const formatShortDate = (value) =>
   }).format(new Date(value))
 
 const sortEventsByDate = (items) =>
-  [...items].sort((left, right) => new Date(left.dateTime) - new Date(right.dateTime))
+  [...items].sort((left, right) => new Date(left.fechaHora) - new Date(right.fechaHora))
 
 const isSameMonth = (date, baseDate) =>
   date.getMonth() === baseDate.getMonth() && date.getFullYear() === baseDate.getFullYear()
 
+const formatStatusLabel = (status) =>
+  status === 'HABILITADO' ? 'Habilitado' : 'No habilitado'
+
+const readErrorMessage = async (response, fallbackMessage) => {
+  const payload = await response.json().catch(() => null)
+  const details = Array.isArray(payload?.details) ? payload.details.join(' ') : ''
+  return details || payload?.message || fallbackMessage
+}
+
 function EventosOverviewPage() {
-  const [events, setEvents] = useState(() => sortEventsByDate(eventosInitialRecords))
-  const [selectedEventId, setSelectedEventId] = useState(eventosInitialRecords[0]?.id ?? null)
+  const [events, setEvents] = useState([])
+  const [selectedEventId, setSelectedEventId] = useState(null)
+  const [selectedEvent, setSelectedEvent] = useState(null)
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
   const [formValues, setFormValues] = useState(emptyForm)
+  const [isLoadingEvents, setIsLoadingEvents] = useState(true)
+  const [isLoadingSelectedEvent, setIsLoadingSelectedEvent] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isUpdatingAttendance, setIsUpdatingAttendance] = useState('')
+  const [errorMessage, setErrorMessage] = useState('')
 
-  const selectedEvent = events.find((eventItem) => eventItem.id === selectedEventId) ?? null
-  const totalEvents = events.length
-  const upcomingEvents = sortEventsByDate(
-    events.filter((eventItem) => new Date(eventItem.dateTime) >= EVENT_REFERENCE_DATE),
-  )
-  const nextEvent = upcomingEvents[0] ?? events[0] ?? null
-  const eventsThisMonth = events.filter((eventItem) =>
-    isSameMonth(new Date(eventItem.dateTime), EVENT_REFERENCE_DATE),
-  ).length
-  const attendedMembersCount = selectedEvent?.attendanceMemberIds.length ?? 0
-  const availableMembersCount = eventosMockMembers.length
+  const loadEvents = async (preferredEventId = null) => {
+    setIsLoadingEvents(true)
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/eventos`, {
+        credentials: 'include',
+      })
+
+      if (!response.ok) {
+        throw new Error(await readErrorMessage(response, 'No se pudo cargar la lista de eventos.'))
+      }
+
+      const data = sortEventsByDate(await response.json())
+      setEvents(data)
+
+      if (data.length === 0) {
+        setSelectedEventId(null)
+        setSelectedEvent(null)
+        return
+      }
+
+      const nextSelectedId =
+        preferredEventId && data.some((eventItem) => eventItem.id === preferredEventId)
+          ? preferredEventId
+          : data.some((eventItem) => eventItem.id === selectedEventId)
+            ? selectedEventId
+            : data[0].id
+
+      setSelectedEventId(nextSelectedId)
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : 'No se pudo conectar con el backend de eventos.',
+      )
+    } finally {
+      setIsLoadingEvents(false)
+    }
+  }
+
+  const loadSelectedEvent = async (eventId) => {
+    setIsLoadingSelectedEvent(true)
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/eventos/${eventId}`, {
+        credentials: 'include',
+      })
+
+      if (!response.ok) {
+        throw new Error(
+          await readErrorMessage(response, 'No se pudo cargar el detalle del evento.'),
+        )
+      }
+
+      const data = await response.json()
+      setSelectedEvent(data)
+      setEvents((current) =>
+        current.map((eventItem) =>
+          eventItem.id === data.id
+            ? {
+                ...eventItem,
+                nombre: data.nombre,
+                descripcion: data.descripcion,
+                fechaHora: data.fechaHora,
+                asistenciasRegistradas: data.asistenciasRegistradas,
+              }
+            : eventItem,
+        ),
+      )
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : 'No se pudo cargar el detalle del evento.',
+      )
+      setSelectedEvent(null)
+    } finally {
+      setIsLoadingSelectedEvent(false)
+    }
+  }
+
+  useEffect(() => {
+    loadEvents()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
+    if (!selectedEventId) {
+      setSelectedEvent(null)
+      return
+    }
+
+    loadSelectedEvent(selectedEventId)
+  }, [selectedEventId])
 
   useEffect(() => {
     if (!isCreateModalOpen) {
@@ -84,6 +184,30 @@ function EventosOverviewPage() {
     }
   }, [isCreateModalOpen])
 
+  const currentDate = useMemo(() => new Date(), [])
+  const totalEvents = events.length
+  const upcomingEvents = useMemo(
+    () =>
+      sortEventsByDate(
+        events.filter((eventItem) => new Date(eventItem.fechaHora) >= currentDate),
+      ),
+    [events, currentDate],
+  )
+  const nextEvent = upcomingEvents[0] ?? events[0] ?? null
+  const eventsThisMonth = useMemo(
+    () =>
+      events.filter((eventItem) =>
+        isSameMonth(new Date(eventItem.fechaHora), currentDate),
+      ).length,
+    [events, currentDate],
+  )
+  const attendedMembersCount = selectedEvent?.asistenciasRegistradas ?? 0
+  const availableMembersCount = selectedEvent?.colegiados.length ?? 0
+  const attendancePercent =
+    availableMembersCount === 0
+      ? 0
+      : Math.round((attendedMembersCount / availableMembersCount) * 100)
+
   const handleInputChange = (event) => {
     const { name, value } = event.target
 
@@ -93,49 +217,104 @@ function EventosOverviewPage() {
     }))
   }
 
-  const handleCreateEvent = (event) => {
+  const handleCreateEvent = async (event) => {
     event.preventDefault()
+    setIsSubmitting(true)
+    setErrorMessage('')
 
-    const nextEventRecord = {
-      id: `evento-${Date.now()}`,
-      name: formValues.name.trim(),
-      dateTime: `${formValues.date}T${formValues.time}`,
-      description: formValues.description.trim(),
-      attendanceMemberIds: [],
+    try {
+      const response = await fetch(`${API_BASE_URL}/eventos`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          nombre: formValues.name.trim(),
+          fecha: formValues.date,
+          hora: formValues.time,
+          descripcion: formValues.description.trim(),
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error(await readErrorMessage(response, 'No se pudo crear el evento.'))
+      }
+
+      const createdEvent = await response.json()
+      setFormValues(emptyForm)
+      setIsCreateModalOpen(false)
+      setSelectedEvent(createdEvent)
+      await loadEvents(createdEvent.id)
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : 'No se pudo crear el evento.',
+      )
+    } finally {
+      setIsSubmitting(false)
     }
-
-    const sortedEvents = sortEventsByDate([...events, nextEventRecord])
-    setEvents(sortedEvents)
-    setSelectedEventId(nextEventRecord.id)
-    setFormValues(emptyForm)
-    setIsCreateModalOpen(false)
   }
 
-  const handleToggleMember = (memberId) => {
+  const handleToggleMember = async (memberId, isChecked) => {
     if (!selectedEvent) {
       return
     }
 
-    setEvents((current) =>
-      current.map((eventItem) => {
-        if (eventItem.id !== selectedEvent.id) {
-          return eventItem
-        }
+    setIsUpdatingAttendance(String(memberId))
+    setErrorMessage('')
 
-        const isSelected = eventItem.attendanceMemberIds.includes(memberId)
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/eventos/${selectedEvent.id}/asistencias/${memberId}`,
+        {
+          method: isChecked ? 'DELETE' : 'PUT',
+          credentials: 'include',
+        },
+      )
 
-        return {
-          ...eventItem,
-          attendanceMemberIds: isSelected
-            ? eventItem.attendanceMemberIds.filter((currentId) => currentId !== memberId)
-            : [...eventItem.attendanceMemberIds, memberId],
-        }
-      }),
-    )
+      if (!response.ok) {
+        throw new Error(
+          await readErrorMessage(
+            response,
+            'No se pudo actualizar la asistencia del colegiado.',
+          ),
+        )
+      }
+
+      const updatedEvent = await response.json()
+      setSelectedEvent(updatedEvent)
+      setEvents((current) =>
+        current.map((eventItem) =>
+          eventItem.id === updatedEvent.id
+            ? {
+                ...eventItem,
+                nombre: updatedEvent.nombre,
+                descripcion: updatedEvent.descripcion,
+                fechaHora: updatedEvent.fechaHora,
+                asistenciasRegistradas: updatedEvent.asistenciasRegistradas,
+              }
+            : eventItem,
+        ),
+      )
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : 'No se pudo actualizar la asistencia del colegiado.',
+      )
+    } finally {
+      setIsUpdatingAttendance('')
+    }
   }
 
   return (
     <div className="space-y-6">
+      {errorMessage ? (
+        <div className="rounded-[24px] border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-700">
+          {errorMessage}
+        </div>
+      ) : null}
+
       <section className="grid gap-4 xl:grid-cols-3">
         <article className="rounded-[28px] border border-cobalt bg-white p-6 shadow-[0_16px_40px_-30px_rgba(15,23,42,0.55)]">
           <div className="flex items-start justify-between gap-4">
@@ -154,7 +333,7 @@ function EventosOverviewPage() {
           </div>
 
           <p className="mt-3 text-sm leading-6 text-slate-600">
-            Vista local con eventos registrados manualmente desde el modulo.
+            Total de jornadas registradas actualmente en la base de datos.
           </p>
         </article>
 
@@ -175,7 +354,7 @@ function EventosOverviewPage() {
           </div>
 
           <p className="mt-3 text-sm leading-6 text-slate-600">
-            Jornadas ubicadas dentro del corte visible de abril de 2026.
+            Conteo calculado sobre las fechas registradas para el mes en curso.
           </p>
         </article>
 
@@ -186,7 +365,7 @@ function EventosOverviewPage() {
                 Evento mas proximo
               </p>
               <p className="mt-3 text-xl font-bold tracking-tight text-slate-950">
-                {nextEvent ? nextEvent.name : 'Sin eventos'}
+                {nextEvent ? nextEvent.nombre : 'Sin eventos'}
               </p>
             </div>
 
@@ -196,7 +375,7 @@ function EventosOverviewPage() {
           </div>
 
           <p className="mt-3 text-sm leading-6 text-slate-600">
-            {nextEvent ? formatEventDate(nextEvent.dateTime) : 'Crea un evento para iniciar.'}
+            {nextEvent ? formatEventDate(nextEvent.fechaHora) : 'Crea un evento para iniciar.'}
           </p>
         </article>
       </section>
@@ -236,66 +415,79 @@ function EventosOverviewPage() {
                   Lista de eventos
                 </p>
                 <p className="mt-1 text-sm text-slate-500">
-                  {totalEvents} registros visibles en esta vista
+                  {isLoadingEvents ? 'Cargando registros...' : `${totalEvents} registros visibles`}
                 </p>
               </div>
 
               <span className="rounded-full bg-cobalt-soft px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-cobalt">
-                Local
+                Backend
               </span>
             </div>
 
-            <div className="space-y-3">
-              {events.map((eventItem) => {
-                const isActive = eventItem.id === selectedEventId
-                const attendanceCount = eventItem.attendanceMemberIds.length
+            {isLoadingEvents ? (
+              <div className="rounded-[24px] border border-dashed border-slate-300 bg-white px-4 py-8 text-center text-sm text-slate-500">
+                Cargando eventos registrados...
+              </div>
+            ) : events.length > 0 ? (
+              <div className="space-y-3">
+                {events.map((eventItem) => {
+                  const isActive = eventItem.id === selectedEventId
 
-                return (
-                  <button
-                    key={eventItem.id}
-                    type="button"
-                    onClick={() => setSelectedEventId(eventItem.id)}
-                    className={`w-full rounded-[24px] border px-4 py-4 text-left transition ${
-                      isActive
-                        ? 'border-cobalt bg-[linear-gradient(135deg,#1739a6_0%,#204edc_100%)] text-white shadow-[0_16px_30px_-24px_rgba(30,64,175,0.85)]'
-                        : 'border-slate-200 bg-white text-slate-900 hover:border-slate-300 hover:bg-slate-50'
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-4">
-                      <div>
-                        <p className="text-xs font-bold uppercase tracking-[0.18em] opacity-70">
-                          {formatShortDate(eventItem.dateTime)}
-                        </p>
-                        <p className="mt-2 text-lg font-semibold tracking-tight">
-                          {eventItem.name}
-                        </p>
+                  return (
+                    <button
+                      key={eventItem.id}
+                      type="button"
+                      onClick={() => setSelectedEventId(eventItem.id)}
+                      className={`w-full rounded-[24px] border px-4 py-4 text-left transition ${
+                        isActive
+                          ? 'border-cobalt bg-[linear-gradient(135deg,#1739a6_0%,#204edc_100%)] text-white shadow-[0_16px_30px_-24px_rgba(30,64,175,0.85)]'
+                          : 'border-slate-200 bg-white text-slate-900 hover:border-slate-300 hover:bg-slate-50'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-4">
+                        <div>
+                          <p className="text-xs font-bold uppercase tracking-[0.18em] opacity-70">
+                            {formatShortDate(eventItem.fechaHora)}
+                          </p>
+                          <p className="mt-2 text-lg font-semibold tracking-tight">
+                            {eventItem.nombre}
+                          </p>
+                        </div>
+
+                        <span
+                          className={`rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] ${
+                            isActive
+                              ? 'bg-white/15 text-white'
+                              : 'bg-cobalt-soft text-cobalt'
+                          }`}
+                        >
+                          {eventItem.asistenciasRegistradas} asistencias
+                        </span>
                       </div>
 
-                      <span
-                        className={`rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] ${
-                          isActive
-                            ? 'bg-white/15 text-white'
-                            : 'bg-cobalt-soft text-cobalt'
-                        }`}
-                      >
-                        {attendanceCount} asistencias
-                      </span>
-                    </div>
-
-                    <p className="mt-3 text-sm leading-6 opacity-85">
-                      {eventItem.description}
-                    </p>
-                    <p className="mt-3 text-sm font-medium opacity-85">
-                      {formatEventDate(eventItem.dateTime)}
-                    </p>
-                  </button>
-                )
-              })}
-            </div>
+                      <p className="mt-3 text-sm leading-6 opacity-85">
+                        {eventItem.descripcion}
+                      </p>
+                      <p className="mt-3 text-sm font-medium opacity-85">
+                        {formatEventDate(eventItem.fechaHora)}
+                      </p>
+                    </button>
+                  )
+                })}
+              </div>
+            ) : (
+              <div className="rounded-[24px] border border-dashed border-slate-300 bg-white px-4 py-8 text-center text-sm text-slate-500">
+                Aun no hay eventos registrados en la base de datos.
+              </div>
+            )}
           </article>
 
           <article className="rounded-[28px] border border-slate-200 bg-white p-4 shadow-[0_18px_40px_-34px_rgba(15,23,42,0.45)] sm:p-6">
-            {selectedEvent ? (
+            {isLoadingSelectedEvent ? (
+              <div className="flex min-h-[320px] items-center justify-center rounded-[24px] border border-dashed border-slate-300 bg-[#f8fbff] p-6 text-center text-sm text-slate-500">
+                Cargando detalle del evento...
+              </div>
+            ) : selectedEvent ? (
               <>
                 <div className="flex flex-col gap-5 border-b border-slate-200 pb-5 xl:flex-row xl:items-start xl:justify-between">
                   <div className="max-w-3xl">
@@ -303,10 +495,10 @@ function EventosOverviewPage() {
                       Evento seleccionado
                     </span>
                     <h3 className="mt-3 text-3xl font-bold tracking-tight text-slate-950">
-                      {selectedEvent.name}
+                      {selectedEvent.nombre}
                     </h3>
                     <p className="mt-3 text-sm leading-7 text-slate-600">
-                      {selectedEvent.description}
+                      {selectedEvent.descripcion}
                     </p>
                   </div>
 
@@ -315,7 +507,7 @@ function EventosOverviewPage() {
                       Fecha y hora
                     </p>
                     <p className="mt-2 text-base font-semibold text-slate-950">
-                      {formatEventDate(selectedEvent.dateTime)}
+                      {formatEventDate(selectedEvent.fechaHora)}
                     </p>
                   </div>
                 </div>
@@ -347,7 +539,7 @@ function EventosOverviewPage() {
                           Porcentaje de asistencia
                         </p>
                         <p className="mt-1 text-2xl font-bold text-slate-950">
-                          {Math.round((attendedMembersCount / availableMembersCount) * 100)}%
+                          {attendancePercent}%
                         </p>
                       </div>
                     </div>
@@ -380,12 +572,13 @@ function EventosOverviewPage() {
                   </div>
 
                   <div className="divide-y divide-slate-200 bg-white">
-                    {eventosMockMembers.map((member, index) => {
-                      const isChecked = selectedEvent.attendanceMemberIds.includes(member.id)
+                    {selectedEvent.colegiados.map((member, index) => {
+                      const isChecked = member.asistio
+                      const isUpdating = isUpdatingAttendance === String(member.colegiadoId)
 
                       return (
                         <label
-                          key={member.id}
+                          key={member.colegiadoId}
                           className={`grid cursor-pointer gap-4 px-5 py-5 lg:grid-cols-[92px_1.3fr_1fr_0.9fr_90px] lg:items-center lg:px-6 ${
                             index % 2 === 1 ? 'bg-[#f8fbff]' : 'bg-white'
                           }`}
@@ -394,8 +587,11 @@ function EventosOverviewPage() {
                             <input
                               type="checkbox"
                               checked={isChecked}
-                              onChange={() => handleToggleMember(member.id)}
-                              className="h-5 w-5 rounded border-slate-300 accent-[#1739a6]"
+                              disabled={isUpdating}
+                              onChange={() =>
+                                handleToggleMember(member.colegiadoId, member.asistio)
+                              }
+                              className="h-5 w-5 rounded border-slate-300 accent-[#1739a6] disabled:cursor-not-allowed disabled:opacity-60"
                             />
                           </div>
 
@@ -403,8 +599,12 @@ function EventosOverviewPage() {
                             <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-400 lg:hidden">
                               Colegiado
                             </p>
-                            <p className="font-semibold text-slate-950">{member.name}</p>
-                            <p className="mt-1 text-sm text-slate-500">{member.code}</p>
+                            <p className="font-semibold text-slate-950">
+                              {member.nombreCompleto}
+                            </p>
+                            <p className="mt-1 text-sm text-slate-500">
+                              {member.codigoColegiatura}
+                            </p>
                           </div>
 
                           <div>
@@ -412,7 +612,7 @@ function EventosOverviewPage() {
                               Especialidad
                             </p>
                             <p className="text-sm font-medium text-slate-700">
-                              {member.specialty}
+                              {member.especialidadPrincipal}
                             </p>
                           </div>
 
@@ -421,9 +621,11 @@ function EventosOverviewPage() {
                               Estado
                             </p>
                             <span
-                              className={`inline-flex rounded-full px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] ${member.statusTone}`}
+                              className={`inline-flex rounded-full px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] ${
+                                statusStyles[member.estado] ?? 'bg-slate-100 text-slate-600'
+                              }`}
                             >
-                              {member.status}
+                              {formatStatusLabel(member.estado)}
                             </span>
                           </div>
 
@@ -435,7 +637,7 @@ function EventosOverviewPage() {
                                   : 'bg-slate-100 text-slate-500'
                               }`}
                             >
-                              {isChecked ? 'Asistio' : 'Pendiente'}
+                              {isUpdating ? 'Guardando' : isChecked ? 'Asistio' : 'Pendiente'}
                             </span>
                           </div>
                         </label>
@@ -473,8 +675,8 @@ function EventosOverviewPage() {
                   Crear evento institucional
                 </h2>
                 <p className="mt-2 text-sm leading-6 text-slate-600">
-                  Completa los campos base para generar una nueva vista de evento en el
-                  modulo.
+                  Completa los campos base para registrar una nueva jornada en el
+                  sistema.
                 </p>
               </div>
 
@@ -557,9 +759,10 @@ function EventosOverviewPage() {
                 </button>
                 <button
                   type="submit"
-                  className="inline-flex items-center justify-center rounded-2xl bg-[linear-gradient(135deg,#1739a6_0%,#204edc_100%)] px-5 py-3 text-sm font-semibold text-white shadow-[0_18px_34px_-24px_rgba(30,64,175,0.95)] transition hover:-translate-y-0.5"
+                  disabled={isSubmitting}
+                  className="inline-flex items-center justify-center rounded-2xl bg-[linear-gradient(135deg,#1739a6_0%,#204edc_100%)] px-5 py-3 text-sm font-semibold text-white shadow-[0_18px_34px_-24px_rgba(30,64,175,0.95)] transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-70"
                 >
-                  Crear evento
+                  {isSubmitting ? 'Creando...' : 'Crear evento'}
                 </button>
               </div>
             </form>

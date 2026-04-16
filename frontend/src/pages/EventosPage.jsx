@@ -93,7 +93,7 @@ function EventosPage() {
                     <FileText size={18} strokeWidth={2.2} />
                   </div>
                   <p className="text-sm leading-6 text-slate-600">
-                    Estructura lista para conectar check-in, stock y trazabilidad real.
+                    Vista conectada para registrar asistencia y consultar el padron real.
                   </p>
                 </div>
               </div>
