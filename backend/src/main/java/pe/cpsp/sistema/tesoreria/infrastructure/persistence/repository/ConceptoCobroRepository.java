@@ -10,7 +10,15 @@ public interface ConceptoCobroRepository extends JpaRepository<ConceptoCobro, Lo
 
   long countByEstado(EstadoConceptoCobro estado);
 
+  long countByEstadoAndAfectaHabilitacion(EstadoConceptoCobro estado, boolean afectaHabilitacion);
+
+  long countByEstadoAndExoneradoIgv(EstadoConceptoCobro estado, boolean exoneradoIgv);
+
   List<ConceptoCobro> findByEstadoOrderByCategoriaAscNombreAsc(EstadoConceptoCobro estado);
 
+  List<ConceptoCobro> findAllByOrderByCategoriaAscNombreAsc();
+
   Optional<ConceptoCobro> findByCodigo(String codigo);
+
+  boolean existsByCodigoIgnoreCase(String codigo);
 }

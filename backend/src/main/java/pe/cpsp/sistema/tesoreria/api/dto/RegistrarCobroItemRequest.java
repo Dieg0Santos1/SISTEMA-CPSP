@@ -6,7 +6,8 @@ import jakarta.validation.constraints.NotNull;
 import java.math.BigDecimal;
 
 public record RegistrarCobroItemRequest(
-    @NotNull Long conceptoCobroId,
+    Long conceptoCobroId,
+    Long fraccionamientoCuotaId,
     String periodoReferencia,
     @NotNull @Min(1) Integer cantidad,
     @NotNull @DecimalMin("0.00") BigDecimal descuento,

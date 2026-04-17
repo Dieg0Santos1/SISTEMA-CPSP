@@ -16,6 +16,10 @@ public record CobranzaColegiadoDetailResponse(
     BigDecimal saldoPendienteTotal,
     boolean ceremoniaPendiente,
     int periodosPendientesCount,
+    BigDecimal montoFraccionable,
+    boolean puedeCrearFraccionamiento,
+    List<String> periodosFraccionables,
     String ruc,
     List<String> especialidades,
-    List<PeriodoCobranzaResponse> periodosMensuales) {}
+    List<PeriodoCobranzaResponse> periodosMensuales,
+    FraccionamientoDetailResponse fraccionamientoActivo) {}

@@ -13,4 +13,6 @@ public interface InventarioProductoRepository extends JpaRepository<InventarioPr
 
   @EntityGraph(attributePaths = "entregas")
   Optional<InventarioProducto> findByIdAndActivoTrue(Long id);
+
+  boolean existsByCodigoIgnoreCase(String codigo);
 }

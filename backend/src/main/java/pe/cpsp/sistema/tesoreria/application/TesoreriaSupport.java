@@ -4,6 +4,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
@@ -13,18 +14,24 @@ import org.springframework.stereotype.Component;
 import pe.cpsp.sistema.colegiados.domain.model.Colegiado;
 import pe.cpsp.sistema.tesoreria.domain.model.Cobro;
 import pe.cpsp.sistema.tesoreria.domain.model.CobroDetalle;
+import pe.cpsp.sistema.tesoreria.domain.model.EstadoFraccionamiento;
+import pe.cpsp.sistema.tesoreria.domain.model.EstadoFraccionamientoCuota;
+import pe.cpsp.sistema.tesoreria.domain.model.Fraccionamiento;
+import pe.cpsp.sistema.tesoreria.domain.model.FraccionamientoCuota;
 
 @Component
 class TesoreriaSupport {
 
   static final String CODIGO_APORTACION_MENSUAL = "APO-MEN";
   static final String CODIGO_CEREMONIA = "CER-JUR";
+  static final String CODIGO_FRACCIONAMIENTO = "FRAC-CUO";
   private static final List<String> MONTH_LABELS =
       List.of("Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic");
 
   CobranzaProfile buildProfile(
       Colegiado colegiado,
       List<Cobro> cobros,
+      List<Fraccionamiento> fraccionamientos,
       LocalDate today,
       BigDecimal ceremoniaMonto,
       BigDecimal aportacionMonto) {
@@ -82,21 +89,50 @@ class TesoreriaSupport {
     YearMonth firstDueMonth =
         ceremonyPaymentDate != null ? YearMonth.from(ceremonyPaymentDate).plusMonths(1) : null;
     YearMonth currentMonth = YearMonth.from(today);
+    Fraccionamiento activeFraccionamiento =
+        fraccionamientos.stream()
+            .filter(fraccionamiento -> fraccionamiento.getEstado() == EstadoFraccionamiento.ACTIVO)
+            .findFirst()
+            .orElse(null);
+    Set<YearMonth> refinancedPeriods =
+        fraccionamientos.stream()
+            .filter(
+                fraccionamiento ->
+                    fraccionamiento.getEstado() == EstadoFraccionamiento.ACTIVO
+                        || fraccionamiento.getEstado() == EstadoFraccionamiento.PAGADO)
+            .flatMap(fraccionamiento -> fraccionamiento.getPeriodos().stream())
+            .map(periodo -> parsePeriod(periodo.getPeriodoReferencia()))
+            .filter(Objects::nonNull)
+            .collect(Collectors.toCollection(LinkedHashSet::new));
     List<YearMonth> pendingPeriods = new ArrayList<>();
 
     if (firstDueMonth != null) {
       YearMonth cursor = firstDueMonth;
       while (!cursor.isAfter(currentMonth)) {
-        if (!paidPeriods.contains(cursor)) {
+        if (!paidPeriods.contains(cursor) && !refinancedPeriods.contains(cursor)) {
           pendingPeriods.add(cursor);
         }
         cursor = cursor.plusMonths(1);
       }
     }
 
+    BigDecimal fraccionamientoPendiente =
+        activeFraccionamiento == null
+            ? BigDecimal.ZERO
+            : activeFraccionamiento.getCuotas().stream()
+                .filter(cuota -> cuota.getEstado() == EstadoFraccionamientoCuota.PENDIENTE)
+                .map(FraccionamientoCuota::getMonto)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
     BigDecimal saldoPendienteTotal =
         (ceremoniaPendiente ? ceremoniaMonto : BigDecimal.ZERO)
-            .add(aportacionMonto.multiply(BigDecimal.valueOf(pendingPeriods.size())));
+            .add(aportacionMonto.multiply(BigDecimal.valueOf(pendingPeriods.size())))
+            .add(fraccionamientoPendiente);
+
+    BigDecimal montoFraccionable =
+        ceremoniaPendiente
+            ? BigDecimal.ZERO
+            : aportacionMonto.multiply(BigDecimal.valueOf(pendingPeriods.size()));
 
     List<PeriodoCobranza> periodStates = new ArrayList<>();
     if (firstDueMonth != null) {
@@ -110,11 +146,20 @@ class TesoreriaSupport {
               : currentYearStart;
 
       if (!displayStart.isAfter(currentYearEnd)) {
-        YearMonth graceStart =
-            ultimoPeriodoPagado != null ? ultimoPeriodoPagado.plusMonths(1) : firstDueMonth;
-        YearMonth graceEnd =
-            habilitadoHasta != null ? YearMonth.from(habilitadoHasta) : YearMonth.from(today);
+        YearMonth graceStart = null;
+        YearMonth graceEnd = null;
+
+        if (ultimoPeriodoPagado != null) {
+          graceStart = ultimoPeriodoPagado.plusMonths(1);
+          graceEnd = ultimoPeriodoPagado.plusMonths(3);
+        } else if (firstDueMonth != null && ceremonyPaymentDate != null) {
+          graceStart = firstDueMonth;
+          graceEnd = firstDueMonth.plusMonths(2);
+        }
+
         YearMonth cursor = displayStart;
+        boolean graceWindowStillOpen =
+            graceEnd != null && !YearMonth.from(today).isAfter(graceEnd);
 
         while (!cursor.isAfter(currentYearEnd)) {
           boolean coveredByCeremony =
@@ -127,8 +172,11 @@ class TesoreriaSupport {
           if (paidPeriods.contains(cursor) || coveredByCeremony) {
             status = "PAID";
             selectable = false;
+          } else if (refinancedPeriods.contains(cursor)) {
+            status = "REFINANCED";
+            selectable = false;
           } else if (
-              habilitado
+              graceWindowStillOpen
                   && graceStart != null
                   && !cursor.isBefore(graceStart)
                   && !cursor.isAfter(graceEnd)) {
@@ -153,8 +201,22 @@ class TesoreriaSupport {
         habilitadoHasta,
         habilitado,
         saldoPendienteTotal,
+        montoFraccionable,
         pendingPeriods,
-        periodStates);
+        periodStates,
+        activeFraccionamiento);
+  }
+
+  FraccionamientoCuota findNextPendingCuota(Fraccionamiento fraccionamiento) {
+    if (fraccionamiento == null) {
+      return null;
+    }
+
+    return fraccionamiento.getCuotas().stream()
+        .filter(cuota -> cuota.getEstado() == EstadoFraccionamientoCuota.PENDIENTE)
+        .sorted(Comparator.comparing(FraccionamientoCuota::getNumeroCuota))
+        .findFirst()
+        .orElse(null);
   }
 
   String buildConceptSummary(Cobro cobro) {
@@ -196,8 +258,10 @@ class TesoreriaSupport {
       LocalDate habilitadoHasta,
       boolean habilitado,
       BigDecimal saldoPendienteTotal,
+      BigDecimal montoFraccionable,
       List<YearMonth> periodosPendientes,
-      List<PeriodoCobranza> periodosMensuales) {}
+      List<PeriodoCobranza> periodosMensuales,
+      Fraccionamiento fraccionamientoActivo) {}
 
   record PeriodoCobranza(YearMonth period, String label, String status, boolean selectable) {}
 }

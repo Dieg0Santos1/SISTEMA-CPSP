@@ -4,6 +4,8 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Clock;
 import java.time.LocalDate;
+import java.time.YearMonth;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -20,7 +22,10 @@ import pe.cpsp.sistema.tesoreria.api.dto.CobranzaColegiadoListItemResponse;
 import pe.cpsp.sistema.tesoreria.api.dto.ComprobanteListadoResponse;
 import pe.cpsp.sistema.tesoreria.api.dto.ComprobanteSerieResponse;
 import pe.cpsp.sistema.tesoreria.api.dto.ComprobantesPageResponse;
+import pe.cpsp.sistema.tesoreria.api.dto.ConceptoCobroCatalogoResponse;
 import pe.cpsp.sistema.tesoreria.api.dto.ConceptoCobroResponse;
+import pe.cpsp.sistema.tesoreria.api.dto.FraccionamientoCuotaResponse;
+import pe.cpsp.sistema.tesoreria.api.dto.FraccionamientoDetailResponse;
 import pe.cpsp.sistema.tesoreria.api.dto.HistorialPageResponse;
 import pe.cpsp.sistema.tesoreria.api.dto.OperacionTesoreriaResponse;
 import pe.cpsp.sistema.tesoreria.api.dto.PagedResponse;
@@ -32,10 +37,14 @@ import pe.cpsp.sistema.tesoreria.domain.model.Cobro;
 import pe.cpsp.sistema.tesoreria.domain.model.ComprobanteSerie;
 import pe.cpsp.sistema.tesoreria.domain.model.ConceptoCobro;
 import pe.cpsp.sistema.tesoreria.domain.model.EstadoConceptoCobro;
+import pe.cpsp.sistema.tesoreria.domain.model.EstadoFraccionamientoCuota;
+import pe.cpsp.sistema.tesoreria.domain.model.Fraccionamiento;
+import pe.cpsp.sistema.tesoreria.domain.model.FraccionamientoCuota;
 import pe.cpsp.sistema.tesoreria.domain.model.MetodoPago;
 import pe.cpsp.sistema.tesoreria.infrastructure.persistence.repository.CobroRepository;
 import pe.cpsp.sistema.tesoreria.infrastructure.persistence.repository.ComprobanteSerieRepository;
 import pe.cpsp.sistema.tesoreria.infrastructure.persistence.repository.ConceptoCobroRepository;
+import pe.cpsp.sistema.tesoreria.infrastructure.persistence.repository.FraccionamientoRepository;
 
 @Service
 @Transactional(readOnly = true)
@@ -45,6 +54,7 @@ public class TesoreriaQueryService {
   private final ComprobanteSerieRepository comprobanteSerieRepository;
   private final CobroRepository cobroRepository;
   private final ColegiadoRepository colegiadoRepository;
+  private final FraccionamientoRepository fraccionamientoRepository;
   private final TesoreriaSupport tesoreriaSupport;
   private final Clock appClock;
 
@@ -53,12 +63,14 @@ public class TesoreriaQueryService {
       ComprobanteSerieRepository comprobanteSerieRepository,
       CobroRepository cobroRepository,
       ColegiadoRepository colegiadoRepository,
+      FraccionamientoRepository fraccionamientoRepository,
       TesoreriaSupport tesoreriaSupport,
       Clock appClock) {
     this.conceptoCobroRepository = conceptoCobroRepository;
     this.comprobanteSerieRepository = comprobanteSerieRepository;
     this.cobroRepository = cobroRepository;
     this.colegiadoRepository = colegiadoRepository;
+    this.fraccionamientoRepository = fraccionamientoRepository;
     this.tesoreriaSupport = tesoreriaSupport;
     this.appClock = appClock;
   }
@@ -157,6 +169,11 @@ public class TesoreriaQueryService {
         profile.saldoPendienteTotal(),
         profile.ceremoniaPendiente(),
         profile.periodosPendientes().size(),
+        profile.montoFraccionable(),
+        !profile.ceremoniaPendiente()
+            && profile.fraccionamientoActivo() == null
+            && profile.montoFraccionable().compareTo(BigDecimal.ZERO) > 0,
+        profile.periodosPendientes().stream().map(YearMonth::toString).toList(),
         colegiado.getRuc(),
         List.copyOf(colegiado.getEspecialidades()),
         profile.periodosMensuales().stream()
@@ -167,14 +184,39 @@ public class TesoreriaQueryService {
                         period.label(),
                         period.status(),
                         period.selectable()))
-            .toList());
+            .toList(),
+        toFraccionamientoResponse(profile.fraccionamientoActivo()));
   }
 
   public List<ConceptoCobroResponse> listConceptosCobro() {
     return conceptoCobroRepository.findByEstadoOrderByCategoriaAscNombreAsc(EstadoConceptoCobro.ACTIVO)
         .stream()
+        .filter(concepto -> !TesoreriaSupport.CODIGO_FRACCIONAMIENTO.equals(concepto.getCodigo()))
         .map(this::toConceptoResponse)
         .toList();
+  }
+
+  public ConceptoCobroCatalogoResponse getConceptosCobroCatalogo() {
+    List<ConceptoCobroResponse> conceptos =
+        conceptoCobroRepository.findAllByOrderByCategoriaAscNombreAsc().stream()
+            .filter(concepto -> !TesoreriaSupport.CODIGO_FRACCIONAMIENTO.equals(concepto.getCodigo()))
+            .map(this::toConceptoResponse)
+            .toList();
+
+    long categorias =
+        Arrays.stream(pe.cpsp.sistema.tesoreria.domain.model.CategoriaConcepto.values())
+            .map(Enum::name)
+            .filter(
+                categoria ->
+                    conceptos.stream().anyMatch(concepto -> categoria.equals(concepto.categoria())))
+            .count();
+
+    return new ConceptoCobroCatalogoResponse(
+        conceptos,
+        conceptoCobroRepository.countByEstado(EstadoConceptoCobro.ACTIVO),
+        categorias,
+        conceptoCobroRepository.countByEstadoAndAfectaHabilitacion(EstadoConceptoCobro.ACTIVO, true),
+        conceptoCobroRepository.countByEstadoAndExoneradoIgv(EstadoConceptoCobro.ACTIVO, true));
   }
 
   public List<ComprobanteSerieResponse> listSeriesActivas() {
@@ -326,6 +368,16 @@ public class TesoreriaQueryService {
                         .add(cobro),
                 LinkedHashMap::putAll);
 
+    Map<Long, List<Fraccionamiento>> fraccionamientosByColegiado =
+        colegiadoRepository.findAll().stream()
+            .collect(
+                LinkedHashMap::new,
+                (map, colegiado) ->
+                    map.put(
+                        colegiado.getId(),
+                        fraccionamientoRepository.findAllByColegiadoIdWithRelations(colegiado.getId())),
+                LinkedHashMap::putAll);
+
     Map<Long, TesoreriaSupport.CobranzaProfile> profiles = new LinkedHashMap<>();
     colegiadoRepository.findAll().forEach(
         colegiado ->
@@ -334,6 +386,7 @@ public class TesoreriaQueryService {
                 tesoreriaSupport.buildProfile(
                     colegiado,
                     cobrosByColegiado.getOrDefault(colegiado.getId(), List.of()),
+                    fraccionamientosByColegiado.getOrDefault(colegiado.getId(), List.of()),
                     today,
                     ceremoniaMonto,
                     aportacionMonto)));
@@ -484,8 +537,10 @@ public class TesoreriaQueryService {
         null,
         false,
         BigDecimal.ZERO,
+        BigDecimal.ZERO,
         List.of(),
-        List.of());
+        List.of(),
+        null);
   }
 
   private String buildNombreCompleto(Colegiado colegiado) {
@@ -509,5 +564,56 @@ public class TesoreriaQueryService {
       case TRANSFERENCIA -> "Transferencia";
       case POS_TARJETA -> "POS/Tarjeta";
     };
+  }
+
+  private FraccionamientoDetailResponse toFraccionamientoResponse(Fraccionamiento fraccionamiento) {
+    if (fraccionamiento == null) {
+      return null;
+    }
+
+    List<FraccionamientoCuotaResponse> cuotas =
+        fraccionamiento.getCuotas().stream()
+            .sorted(Comparator.comparing(FraccionamientoCuota::getNumeroCuota))
+            .map(this::toCuotaResponse)
+            .toList();
+
+    FraccionamientoCuota siguienteCuota = tesoreriaSupport.findNextPendingCuota(fraccionamiento);
+    BigDecimal saldoPendiente =
+        fraccionamiento.getCuotas().stream()
+            .filter(cuota -> cuota.getEstado() == EstadoFraccionamientoCuota.PENDIENTE)
+            .map(FraccionamientoCuota::getMonto)
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
+    int cuotasPagadas =
+        (int)
+            fraccionamiento.getCuotas().stream()
+                .filter(cuota -> cuota.getEstado() == EstadoFraccionamientoCuota.PAGADA)
+                .count();
+
+    return new FraccionamientoDetailResponse(
+        fraccionamiento.getId(),
+        fraccionamiento.getEstado().name(),
+        fraccionamiento.getMontoTotal(),
+        saldoPendiente,
+        fraccionamiento.getNumeroCuotas(),
+        cuotasPagadas,
+        fraccionamiento.getNumeroCuotas() - cuotasPagadas,
+        fraccionamiento.getFechaInicio(),
+        fraccionamiento.getObservacion(),
+        fraccionamiento.getPeriodos().stream()
+            .map(periodo -> periodo.getPeriodoReferencia())
+            .sorted()
+            .toList(),
+        cuotas,
+        siguienteCuota != null ? toCuotaResponse(siguienteCuota) : null);
+  }
+
+  private FraccionamientoCuotaResponse toCuotaResponse(FraccionamientoCuota cuota) {
+    return new FraccionamientoCuotaResponse(
+        cuota.getId(),
+        cuota.getNumeroCuota(),
+        cuota.getMonto(),
+        cuota.getFechaVencimiento(),
+        cuota.getEstado().name(),
+        cuota.getEstado() == EstadoFraccionamientoCuota.PAGADA);
   }
 }

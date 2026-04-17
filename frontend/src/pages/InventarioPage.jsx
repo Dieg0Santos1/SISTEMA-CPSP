@@ -3,11 +3,14 @@ import {
   BookOpen,
   CalendarDays,
   CheckCheck,
+  ChevronLeft,
   ChevronRight,
   ClipboardList,
   FileBarChart2,
   FolderKanban,
   PackageCheck,
+  Plus,
+  Search,
   ShoppingBag,
   X,
 } from 'lucide-react'
@@ -228,9 +231,23 @@ function ProductDeliveredModal({
   errorMessage,
   activeMemberId,
 }) {
+  const [deliverySearch, setDeliverySearch] = useState('')
   const enabledMembers = product.colegiados.filter((member) => member.habilitado)
   const deliveredMembers = product.colegiados.filter((member) => member.entregado)
   const pendingMembers = enabledMembers.length - deliveredMembers.length
+  const filteredMembers = useMemo(() => {
+    const normalizedSearch = deliverySearch.trim().toLowerCase()
+
+    if (!normalizedSearch) {
+      return product.colegiados
+    }
+
+    return product.colegiados.filter((member) =>
+      [member.nombreCompleto, member.codigoColegiatura]
+        .filter(Boolean)
+        .some((value) => value.toLowerCase().includes(normalizedSearch)),
+    )
+  }, [deliverySearch, product.colegiados])
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/45 px-4 py-8 backdrop-blur-sm">
@@ -301,6 +318,22 @@ function ProductDeliveredModal({
             negocio del inventario.
           </div>
 
+          <div className="mb-4">
+            <label className="group flex w-full items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 transition focus-within:border-cobalt focus-within:bg-white">
+              <Search
+                size={18}
+                className="text-slate-400 transition group-focus-within:text-cobalt"
+              />
+              <input
+                type="search"
+                value={deliverySearch}
+                onChange={(event) => setDeliverySearch(event.target.value)}
+                placeholder="Buscar por codigo o nombre"
+                className="w-full bg-transparent text-sm font-medium text-slate-700 outline-none placeholder:text-slate-400"
+              />
+            </label>
+          </div>
+
           <div className="overflow-hidden rounded-[26px] border border-slate-200">
             <div className="hidden grid-cols-[88px_1.45fr_1fr_0.85fr_100px] bg-[#e9f0ff] px-6 py-4 text-[11px] font-bold uppercase tracking-[0.22em] text-slate-500 lg:grid">
               <span>Check</span>
@@ -311,7 +344,7 @@ function ProductDeliveredModal({
             </div>
 
             <div className="divide-y divide-slate-200 bg-white">
-              {product.colegiados.map((member, index) => {
+              {filteredMembers.map((member, index) => {
                 const isUpdating = activeMemberId === String(member.colegiadoId)
                 const isDisabled = (!member.habilitado && !member.entregado) || isUpdating
 
@@ -379,6 +412,12 @@ function ProductDeliveredModal({
                   </label>
                 )
               })}
+
+              {filteredMembers.length === 0 ? (
+                <div className="px-5 py-10 text-center text-sm text-slate-500">
+                  No encontramos colegiados con ese criterio de busqueda.
+                </div>
+              ) : null}
             </div>
           </div>
         </div>
@@ -387,16 +426,183 @@ function ProductDeliveredModal({
   )
 }
 
+function ProductCreateModal({
+  formValues,
+  formError,
+  isSubmitting,
+  onClose,
+  onInputChange,
+  onSubmit,
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/45 px-4 py-8 backdrop-blur-sm">
+      <div className="w-full max-w-xl rounded-[32px] border border-white/80 bg-white shadow-[0_24px_70px_-36px_rgba(15,23,42,0.8)]">
+        <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-6 py-5 sm:px-8">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.24em] text-cobalt">
+              Agregar
+            </p>
+            <h2 className="mt-2 text-2xl font-bold tracking-tight text-slate-950">
+              Registrar producto de inventario
+            </h2>
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              Completa los datos base del producto para guardarlo en el backend y la
+              base de datos.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Cerrar modal"
+            className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-500 transition hover:border-slate-300 hover:text-slate-900"
+          >
+            <X size={18} strokeWidth={2.2} />
+          </button>
+        </div>
+
+        <form onSubmit={onSubmit} className="space-y-5 px-6 py-6 sm:px-8">
+          {formError ? (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+              {formError}
+            </div>
+          ) : null}
+
+          <div className="grid gap-5 sm:grid-cols-2">
+            <label className="space-y-2">
+              <span className="text-sm font-semibold text-slate-700">Codigo</span>
+              <input
+                type="text"
+                name="codigo"
+                value={formValues.codigo}
+                onChange={onInputChange}
+                required
+                maxLength={40}
+                placeholder="Ej. ALM-2027"
+                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm uppercase text-slate-700 outline-none transition focus:border-cobalt"
+              />
+            </label>
+
+            <label className="space-y-2">
+              <span className="text-sm font-semibold text-slate-700">Categoria</span>
+              <input
+                type="text"
+                name="categoria"
+                value={formValues.categoria}
+                onChange={onInputChange}
+                required
+                maxLength={80}
+                placeholder="Ej. Material institucional"
+                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-cobalt"
+              />
+            </label>
+          </div>
+
+          <label className="space-y-2">
+            <span className="text-sm font-semibold text-slate-700">Nombre</span>
+            <input
+              type="text"
+              name="nombre"
+              value={formValues.nombre}
+              onChange={onInputChange}
+              required
+              maxLength={160}
+              placeholder="Ej. Almanaques institucionales 2027"
+              className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-cobalt"
+            />
+          </label>
+
+          <label className="space-y-2">
+            <span className="text-sm font-semibold text-slate-700">Descripcion</span>
+            <textarea
+              name="descripcion"
+              value={formValues.descripcion}
+              onChange={onInputChange}
+              rows="4"
+              maxLength={600}
+              placeholder="Describe el uso o alcance del producto."
+              className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-cobalt"
+            />
+          </label>
+
+          <div className="grid gap-5 sm:grid-cols-2">
+            <label className="space-y-2">
+              <span className="text-sm font-semibold text-slate-700">Precio de referencia</span>
+              <input
+                type="number"
+                name="precioReferencia"
+                value={formValues.precioReferencia}
+                onChange={onInputChange}
+                required
+                min="0"
+                step="0.01"
+                placeholder="0.00"
+                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-cobalt"
+              />
+            </label>
+
+            <label className="space-y-2">
+              <span className="text-sm font-semibold text-slate-700">Stock inicial</span>
+              <input
+                type="number"
+                name="stockInicial"
+                value={formValues.stockInicial}
+                onChange={onInputChange}
+                required
+                min="0"
+                step="1"
+                placeholder="0"
+                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-cobalt"
+              />
+            </label>
+          </div>
+
+          <div className="flex flex-col-reverse gap-3 border-t border-slate-200 pt-5 sm:flex-row sm:justify-end">
+            <button
+              type="button"
+              onClick={onClose}
+              className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-900"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="inline-flex items-center justify-center rounded-2xl bg-[linear-gradient(135deg,#1739a6_0%,#204edc_100%)] px-5 py-3 text-sm font-semibold text-white shadow-[0_18px_34px_-24px_rgba(30,64,175,0.95)] transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-70"
+            >
+              {isSubmitting ? 'Guardando...' : 'Guardar producto'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
 function InventarioPage() {
+  const emptyProductForm = {
+    codigo: '',
+    nombre: '',
+    categoria: '',
+    descripcion: '',
+    precioReferencia: '',
+    stockInicial: '',
+  }
   const [products, setProducts] = useState([])
   const [movements, setMovements] = useState([])
   const [activeModalMode, setActiveModalMode] = useState('')
   const [activeProductId, setActiveProductId] = useState(null)
   const [activeProductDetail, setActiveProductDetail] = useState(null)
+  const [isCreateProductModalOpen, setIsCreateProductModalOpen] = useState(false)
   const [isLoadingDashboard, setIsLoadingDashboard] = useState(true)
   const [isLoadingProductDetail, setIsLoadingProductDetail] = useState(false)
   const [isUpdatingDelivery, setIsUpdatingDelivery] = useState('')
+  const [isSubmittingProduct, setIsSubmittingProduct] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
+  const [productFormError, setProductFormError] = useState('')
+  const [productFormValues, setProductFormValues] = useState(emptyProductForm)
+  const [productSearch, setProductSearch] = useState('')
+  const [productsPage, setProductsPage] = useState(1)
 
   const loadDashboard = async () => {
     setIsLoadingDashboard(true)
@@ -458,7 +664,7 @@ function InventarioPage() {
   }, [])
 
   useEffect(() => {
-    if (!activeModalMode) {
+    if (!activeModalMode && !isCreateProductModalOpen) {
       return undefined
     }
 
@@ -467,6 +673,7 @@ function InventarioPage() {
         setActiveModalMode('')
         setActiveProductId(null)
         setActiveProductDetail(null)
+        setIsCreateProductModalOpen(false)
       }
     }
 
@@ -478,7 +685,7 @@ function InventarioPage() {
       document.body.style.overflow = previousOverflow
       window.removeEventListener('keydown', handleEscape)
     }
-  }, [activeModalMode])
+  }, [activeModalMode, isCreateProductModalOpen])
 
   const openProductModal = async (mode, productId) => {
     setErrorMessage('')
@@ -493,6 +700,13 @@ function InventarioPage() {
     setActiveProductId(null)
     setActiveProductDetail(null)
     setIsUpdatingDelivery('')
+  }
+
+  const closeCreateProductModal = () => {
+    setIsCreateProductModalOpen(false)
+    setProductFormError('')
+    setProductFormValues(emptyProductForm)
+    setIsSubmittingProduct(false)
   }
 
   const handleToggleDelivery = async (member) => {
@@ -535,6 +749,54 @@ function InventarioPage() {
     }
   }
 
+  const handleProductInputChange = (event) => {
+    const { name, value } = event.target
+
+    setProductFormValues((current) => ({
+      ...current,
+      [name]: name === 'codigo' ? value.toUpperCase() : value,
+    }))
+  }
+
+  const handleCreateProduct = async (event) => {
+    event.preventDefault()
+    setIsSubmittingProduct(true)
+    setProductFormError('')
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/inventario/productos`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          codigo: productFormValues.codigo.trim(),
+          nombre: productFormValues.nombre.trim(),
+          categoria: productFormValues.categoria.trim(),
+          descripcion: productFormValues.descripcion.trim(),
+          precioReferencia: Number(productFormValues.precioReferencia),
+          stockInicial: Number(productFormValues.stockInicial),
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error(
+            await readErrorMessage(response, 'No se pudo registrar el producto.')
+        )
+      }
+
+      await loadDashboard()
+      closeCreateProductModal()
+    } catch (error) {
+      setProductFormError(
+        error instanceof Error ? error.message : 'No se pudo registrar el producto.',
+      )
+    } finally {
+      setIsSubmittingProduct(false)
+    }
+  }
+
   const totalProducts = products.length
   const totalStock = useMemo(
     () => products.reduce((total, product) => total + product.stockActual, 0),
@@ -548,6 +810,38 @@ function InventarioPage() {
     () => products.reduce((total, product) => total + product.ventasRegistradas, 0),
     [products],
   )
+  const filteredProducts = useMemo(() => {
+    const normalizedSearch = productSearch.trim().toLowerCase()
+
+    if (!normalizedSearch) {
+      return products
+    }
+
+    return products.filter((product) =>
+      [product.nombre, product.categoria, product.descripcion]
+        .filter(Boolean)
+        .some((value) => value.toLowerCase().includes(normalizedSearch)),
+    )
+  }, [productSearch, products])
+  const productsPerPage = 4
+  const totalProductsPages = Math.max(1, Math.ceil(filteredProducts.length / productsPerPage))
+  const paginatedProducts = useMemo(() => {
+    const startIndex = (productsPage - 1) * productsPerPage
+    return filteredProducts.slice(startIndex, startIndex + productsPerPage)
+  }, [filteredProducts, productsPage])
+  const productsRangeStart =
+    filteredProducts.length === 0 ? 0 : (productsPage - 1) * productsPerPage + 1
+  const productsRangeEnd = Math.min(productsPage * productsPerPage, filteredProducts.length)
+
+  useEffect(() => {
+    setProductsPage(1)
+  }, [productSearch])
+
+  useEffect(() => {
+    if (productsPage > totalProductsPages) {
+      setProductsPage(totalProductsPages)
+    }
+  }, [productsPage, totalProductsPages])
 
   return (
     <div className="space-y-6">
@@ -719,7 +1013,7 @@ function InventarioPage() {
         </article>
       </section>
 
-      <section className="grid gap-6 2xl:grid-cols-[minmax(0,1.4fr)_420px]">
+      <section className="grid gap-6 2xl:grid-cols-[minmax(0,1.55fr)_360px]">
         <article className="rounded-[30px] border border-white/80 bg-white p-5 shadow-[0_18px_50px_-38px_rgba(15,23,42,0.7)] sm:p-6">
           <div className="flex flex-col gap-4 border-b border-slate-200 pb-5 lg:flex-row lg:items-center lg:justify-between">
             <div>
@@ -734,6 +1028,15 @@ function InventarioPage() {
                 colegiados desde un modal conectado al backend.
               </p>
             </div>
+
+            <button
+              type="button"
+              onClick={() => setIsCreateProductModalOpen(true)}
+              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[linear-gradient(135deg,#1739a6_0%,#204edc_100%)] px-5 py-3 text-sm font-semibold text-white shadow-[0_18px_34px_-24px_rgba(30,64,175,0.95)] transition hover:-translate-y-0.5"
+            >
+              <Plus size={17} strokeWidth={2.2} />
+              Agregar producto
+            </button>
           </div>
 
           {isLoadingDashboard ? (
@@ -741,86 +1044,143 @@ function InventarioPage() {
               Cargando productos del inventario...
             </div>
           ) : (
-            <div className="mt-6 grid gap-4 xl:grid-cols-2">
-              {products.map((product) => {
-                const presentation = getProductPresentation(product)
+            <>
+              <div className="mt-6 flex flex-col gap-4 border-b border-slate-200 pb-5 lg:flex-row lg:items-center lg:justify-between">
+                <label className="group flex w-full max-w-xl items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 transition focus-within:border-cobalt focus-within:bg-white">
+                  <Search
+                    size={18}
+                    className="text-slate-400 transition group-focus-within:text-cobalt"
+                  />
+                  <input
+                    type="search"
+                    value={productSearch}
+                    onChange={(event) => setProductSearch(event.target.value)}
+                    placeholder="Buscar por nombre, categoria o descripcion"
+                    className="w-full bg-transparent text-sm font-medium text-slate-700 outline-none placeholder:text-slate-400"
+                  />
+                </label>
 
-                return (
-                  <article
-                    key={product.id}
-                    className={`rounded-[28px] border bg-[linear-gradient(180deg,#ffffff_0%,#f8fbff_100%)] p-5 shadow-[0_16px_34px_-30px_rgba(15,23,42,0.55)] ${presentation.tone}`}
-                  >
-                    <div className="flex items-start justify-between gap-4">
-                      <div>
-                        <span
-                          className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] ${presentation.badgeTone}`}
+                <div className="text-sm text-slate-500">
+                  Mostrando {productsRangeStart} a {productsRangeEnd} de {filteredProducts.length}{' '}
+                  productos
+                </div>
+              </div>
+
+              {filteredProducts.length === 0 ? (
+                <div className="mt-6 rounded-[24px] border border-dashed border-slate-300 bg-[#f8fbff] px-4 py-8 text-center text-sm text-slate-500">
+                  No encontramos productos con ese criterio de busqueda.
+                </div>
+              ) : (
+                <>
+                  <div className="mt-6 grid gap-4 xl:grid-cols-2">
+                    {paginatedProducts.map((product) => {
+                      const presentation = getProductPresentation(product)
+
+                      return (
+                        <article
+                          key={product.id}
+                          className={`rounded-[28px] border bg-[linear-gradient(180deg,#ffffff_0%,#f8fbff_100%)] p-5 shadow-[0_16px_34px_-30px_rgba(15,23,42,0.55)] ${presentation.tone}`}
                         >
-                          {product.categoria}
-                        </span>
-                        <h3 className="mt-3 text-2xl font-semibold tracking-tight text-slate-950">
-                          {product.nombre}
-                        </h3>
-                      </div>
+                          <div className="flex items-start justify-between gap-4">
+                            <div>
+                              <span
+                                className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] ${presentation.badgeTone}`}
+                              >
+                                {product.categoria}
+                              </span>
+                              <h3 className="mt-3 text-2xl font-semibold tracking-tight text-slate-950">
+                                {product.nombre}
+                              </h3>
+                            </div>
 
-                      <div className="rounded-2xl bg-[#edf6ff] p-3 text-cobalt">
-                        <BookOpen size={20} strokeWidth={2.2} />
-                      </div>
+                            <div className="rounded-2xl bg-[#edf6ff] p-3 text-cobalt">
+                              <BookOpen size={20} strokeWidth={2.2} />
+                            </div>
+                          </div>
+
+                          <p className="mt-3 text-sm leading-7 text-slate-600">
+                            {product.descripcion}
+                          </p>
+
+                          <div className="mt-5 grid gap-3 sm:grid-cols-[repeat(3,minmax(0,1fr))]">
+                            <div className="min-w-0 rounded-[22px] border border-slate-200 bg-white p-4">
+                              <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">
+                                Stock
+                              </p>
+                              <p className="mt-2 text-2xl font-bold text-slate-950">
+                                {product.stockActual}
+                              </p>
+                            </div>
+                            <div className="min-w-0 rounded-[22px] border border-slate-200 bg-white p-4">
+                              <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">
+                                Ventas
+                              </p>
+                              <p className="mt-2 text-2xl font-bold text-slate-950">
+                                {product.ventasRegistradas}
+                              </p>
+                            </div>
+                            <div className="min-w-0 rounded-[22px] border border-slate-200 bg-white p-4">
+                              <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">
+                                Precio
+                              </p>
+                              <p className="mt-2 text-base font-bold tracking-tight text-slate-950 sm:text-[1.05rem]">
+                                {formatCurrency(product.precioReferencia)}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="mt-5 flex flex-col gap-3 sm:flex-row">
+                            <button
+                              type="button"
+                              onClick={() => openProductModal('report', product.id)}
+                              className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:text-slate-950"
+                            >
+                              <FileBarChart2 size={17} strokeWidth={2.2} />
+                              Reportes
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => openProductModal('delivery', product.id)}
+                              className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl bg-[linear-gradient(135deg,#1739a6_0%,#204edc_100%)] px-4 py-3 text-sm font-semibold text-white shadow-[0_18px_34px_-24px_rgba(30,64,175,0.95)] transition hover:-translate-y-0.5"
+                            >
+                              <CheckCheck size={17} strokeWidth={2.2} />
+                              Producto entregado
+                            </button>
+                          </div>
+                        </article>
+                      )
+                    })}
+                  </div>
+
+                  <div className="mt-6 flex flex-wrap items-center justify-end gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setProductsPage((current) => Math.max(1, current - 1))}
+                      disabled={productsPage === 1}
+                      className="inline-flex h-12 w-12 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-500 transition hover:border-slate-300 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-45"
+                    >
+                      <ChevronLeft size={18} strokeWidth={2.2} />
+                    </button>
+
+                    <div className="rounded-2xl bg-[#eef4ff] px-4 py-3 text-sm font-semibold text-slate-700">
+                      {productsPage} / {totalProductsPages}
                     </div>
 
-                    <p className="mt-3 text-sm leading-7 text-slate-600">
-                      {product.descripcion}
-                    </p>
-
-                    <div className="mt-5 grid gap-3 sm:grid-cols-3">
-                      <div className="rounded-[22px] border border-slate-200 bg-white p-4">
-                        <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">
-                          Stock
-                        </p>
-                        <p className="mt-2 text-2xl font-bold text-slate-950">
-                          {product.stockActual}
-                        </p>
-                      </div>
-                      <div className="rounded-[22px] border border-slate-200 bg-white p-4">
-                        <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">
-                          Ventas
-                        </p>
-                        <p className="mt-2 text-2xl font-bold text-slate-950">
-                          {product.ventasRegistradas}
-                        </p>
-                      </div>
-                      <div className="rounded-[22px] border border-slate-200 bg-white p-4">
-                        <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">
-                          Precio
-                        </p>
-                        <p className="mt-2 text-lg font-bold text-slate-950">
-                          {formatCurrency(product.precioReferencia)}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="mt-5 flex flex-col gap-3 sm:flex-row">
-                      <button
-                        type="button"
-                        onClick={() => openProductModal('report', product.id)}
-                        className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:text-slate-950"
-                      >
-                        <FileBarChart2 size={17} strokeWidth={2.2} />
-                        Reportes
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => openProductModal('delivery', product.id)}
-                        className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl bg-[linear-gradient(135deg,#1739a6_0%,#204edc_100%)] px-4 py-3 text-sm font-semibold text-white shadow-[0_18px_34px_-24px_rgba(30,64,175,0.95)] transition hover:-translate-y-0.5"
-                      >
-                        <CheckCheck size={17} strokeWidth={2.2} />
-                        Producto entregado
-                      </button>
-                    </div>
-                  </article>
-                )
-              })}
-            </div>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setProductsPage((current) => Math.min(totalProductsPages, current + 1))
+                      }
+                      disabled={productsPage === totalProductsPages}
+                      className="inline-flex h-12 w-12 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-500 transition hover:border-slate-300 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-45"
+                    >
+                      <ChevronRight size={18} strokeWidth={2.2} />
+                    </button>
+                  </div>
+                </>
+              )}
+            </>
           )}
         </article>
 
@@ -845,15 +1205,17 @@ function InventarioPage() {
             </div>
           ) : movements.length > 0 ? (
             <div className="mt-5 space-y-3">
-              {movements.map((item) => (
+              {movements.slice(0, 7).map((item) => (
                 <article
                   key={item.id}
-                  className="rounded-[24px] border border-slate-200 bg-[#f8fbff] p-4"
+                  className="rounded-[22px] border border-slate-200 bg-[#f8fbff] p-3.5"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <p className="font-semibold text-slate-950">{item.productoNombre}</p>
-                      <p className="mt-1 text-sm text-slate-500">{item.detalle}</p>
+                      <p className="text-[0.95rem] font-semibold text-slate-950">
+                        {item.productoNombre}
+                      </p>
+                      <p className="mt-1 text-[0.92rem] text-slate-500">{item.detalle}</p>
                     </div>
                     <span
                       className={`inline-flex rounded-full px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] ${
@@ -863,7 +1225,7 @@ function InventarioPage() {
                       {formatMovementType(item.tipo)}
                     </span>
                   </div>
-                  <div className="mt-4 flex items-center justify-between text-sm">
+                  <div className="mt-3 flex items-center justify-between text-sm">
                     <span className="font-semibold text-slate-700">
                       {formatMovementQuantity(item.cantidad)}
                     </span>
@@ -906,6 +1268,17 @@ function InventarioPage() {
             activeMemberId={isUpdatingDelivery}
           />
         )
+      ) : null}
+
+      {isCreateProductModalOpen ? (
+        <ProductCreateModal
+          formValues={productFormValues}
+          formError={productFormError}
+          isSubmitting={isSubmittingProduct}
+          onClose={closeCreateProductModal}
+          onInputChange={handleProductInputChange}
+          onSubmit={handleCreateProduct}
+        />
       ) : null}
     </div>
   )

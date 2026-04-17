@@ -13,11 +13,12 @@ import {
   getTesoreriaColegiadoCobranza,
   getTesoreriaColegiados,
   getTesoreriaConceptosCobro,
+  createTesoreriaFraccionamiento,
   markTesoreriaCobroPrinted,
   postTesoreriaCobro,
 } from '../../services/tesoreriaApi'
 
-const pageSize = 5
+const pageSize = 6
 const documentOptions = [
   { value: 'BOLETA', label: 'Boleta' },
   { value: 'FACTURA', label: 'Factura' },
@@ -32,10 +33,15 @@ const periodToneByStatus = {
   PAID: 'border-emerald-200 bg-emerald-50 text-emerald-700',
   GRACE: 'border-amber-200 bg-amber-50 text-amber-700',
   OVERDUE: 'border-rose-200 bg-rose-50 text-rose-700',
+  REFINANCED: 'border-fuchsia-200 bg-fuchsia-50 text-fuchsia-700',
 }
 const stateToneMap = {
   HABILITADO: 'bg-emerald-100 text-emerald-700',
   NO_HABILITADO: 'bg-rose-100 text-rose-700',
+}
+const fractionationStateToneMap = {
+  ACTIVO: 'bg-fuchsia-100 text-fuchsia-700',
+  PAGADO: 'bg-emerald-100 text-emerald-700',
 }
 
 function getTodayInLimaISO() {
@@ -112,6 +118,115 @@ function buildConceptChips(concept) {
   return chips
 }
 
+function buildInstallmentAmount(total, installments) {
+  const safeInstallments = Math.max(Number(installments) || 0, 1)
+  return Number(total ?? 0) / safeInstallments
+}
+
+function buildFractionationReference(cuota, totalInstallments) {
+  if (!cuota) {
+    return ''
+  }
+
+  return `Cuota ${cuota.numeroCuota}/${totalInstallments}`
+}
+
+function parsePeriodReference(period) {
+  if (!period || !/^\d{4}-\d{2}$/.test(period)) {
+    return null
+  }
+
+  const [year, month] = period.split('-').map(Number)
+  return { year, month }
+}
+
+const monthNames = [
+  'Enero',
+  'Febrero',
+  'Marzo',
+  'Abril',
+  'Mayo',
+  'Junio',
+  'Julio',
+  'Agosto',
+  'Septiembre',
+  'Octubre',
+  'Noviembre',
+  'Diciembre',
+]
+
+function formatMonthYear(period) {
+  const parsed = parsePeriodReference(period)
+  if (!parsed) {
+    return period
+  }
+
+  return `${monthNames[parsed.month - 1]} ${parsed.year}`
+}
+
+function buildFractionationRanges(periods) {
+  if (!Array.isArray(periods) || periods.length === 0) {
+    return []
+  }
+
+  const parsedPeriods = periods
+    .map((period) => ({ raw: period, parsed: parsePeriodReference(period) }))
+    .filter((item) => item.parsed)
+    .sort((left, right) => {
+      const leftValue = left.parsed.year * 100 + left.parsed.month
+      const rightValue = right.parsed.year * 100 + right.parsed.month
+      return leftValue - rightValue
+    })
+
+  const ranges = []
+
+  for (const item of parsedPeriods) {
+    const lastRange = ranges[ranges.length - 1]
+
+    if (
+      lastRange &&
+      lastRange.year === item.parsed.year &&
+      item.parsed.month === lastRange.endMonth + 1
+    ) {
+      lastRange.endMonth = item.parsed.month
+      continue
+    }
+
+    ranges.push({
+      year: item.parsed.year,
+      startMonth: item.parsed.month,
+      endMonth: item.parsed.month,
+    })
+  }
+
+  return ranges.map((range) => {
+    const startLabel = formatMonthYear(`${range.year}-${String(range.startMonth).padStart(2, '0')}`)
+    const endLabel = formatMonthYear(`${range.year}-${String(range.endMonth).padStart(2, '0')}`)
+
+    return {
+      key: `${range.year}-${range.startMonth}-${range.endMonth}`,
+      label: startLabel === endLabel ? startLabel : `${startLabel} - ${endLabel}`,
+    }
+  })
+}
+
+function buildGraceWindow(periods) {
+  if (!Array.isArray(periods) || periods.length === 0) {
+    return null
+  }
+
+  const gracePeriods = periods.filter((period) => period.status === 'GRACE')
+
+  if (gracePeriods.length === 0) {
+    return null
+  }
+
+  return {
+    startLabel: gracePeriods[0].label,
+    endLabel: gracePeriods[gracePeriods.length - 1].label,
+  }
+}
+
 function createPrintableHtml(receipt) {
   const itemRows = receipt.items
     .map(
@@ -174,7 +289,7 @@ function createPrintableHtml(receipt) {
         <thead>
           <tr>
             <th>Concepto</th>
-            <th>Periodo</th>
+            <th>Referencia</th>
             <th>Cantidad</th>
             <th>Monto unitario</th>
             <th>Total</th>
@@ -190,6 +305,260 @@ function createPrintableHtml(receipt) {
       </div>
     </body>
   </html>`
+}
+
+function FractionationModal({
+  memberDetail,
+  form,
+  onChange,
+  onClose,
+  onSubmit,
+  loading,
+  error,
+}) {
+  if (!memberDetail) {
+    return null
+  }
+
+  const fractionation = memberDetail.fraccionamientoActivo
+  const previewInstallment = buildInstallmentAmount(
+    memberDetail.montoFraccionable,
+    form.numeroCuotas,
+  )
+  const fractionableRanges = buildFractionationRanges(memberDetail.periodosFraccionables)
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-sm">
+      <div className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-[32px] border border-white/80 bg-white p-6 shadow-[0_30px_80px_-40px_rgba(15,23,42,0.85)] sm:p-7">
+        <div className="flex items-start justify-between gap-4 border-b border-slate-200 pb-5">
+          <div>
+            <p className="text-sm font-semibold uppercase tracking-[0.22em] text-cobalt">
+              Fraccionamiento
+            </p>
+            <h3 className="mt-2 text-3xl font-bold tracking-tight text-slate-950">
+              {fractionation ? 'Detalle del convenio activo' : 'Crear fraccionamiento'}
+            </h3>
+            <p className="mt-2 text-sm text-slate-500">
+              {memberDetail.nombreCompleto} · {memberDetail.codigoColegiatura}
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-600 transition hover:border-slate-300"
+          >
+            Cerrar
+          </button>
+        </div>
+
+        {fractionation ? (
+          <div className="mt-5 space-y-5">
+            <div className="grid gap-4 md:grid-cols-4">
+              <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                  Estado
+                </p>
+                <span
+                  className={`mt-2 inline-flex rounded-full px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] ${
+                    fractionationStateToneMap[fractionation.estado] ??
+                    'bg-slate-100 text-slate-700'
+                  }`}
+                >
+                  {fractionation.estado}
+                </span>
+              </div>
+              <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                  Total refinanciado
+                </p>
+                <p className="mt-2 text-lg font-semibold text-slate-950">
+                  {formatCurrency(fractionation.montoTotal)}
+                </p>
+              </div>
+              <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                  Cuotas
+                </p>
+                <p className="mt-2 text-lg font-semibold text-slate-950">
+                  {fractionation.cuotasPagadas}/{fractionation.numeroCuotas}
+                </p>
+              </div>
+              <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                  Saldo pendiente
+                </p>
+                <p className="mt-2 text-lg font-semibold text-slate-950">
+                  {formatCurrency(fractionation.saldoPendiente)}
+                </p>
+              </div>
+            </div>
+
+            {fractionation.periodosIncluidos?.length ? (
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                  Periodos incluidos
+                </p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {fractionation.periodosIncluidos.map((periodo) => (
+                    <span
+                      key={periodo}
+                      className="rounded-full bg-fuchsia-50 px-3 py-1 text-xs font-semibold text-fuchsia-700"
+                    >
+                      {periodo}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            <div className="overflow-hidden rounded-[24px] border border-slate-200">
+                <div className="grid grid-cols-[0.8fr_1fr_1fr_1fr] gap-4 bg-slate-50 px-5 py-4 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                  <span>Cuota</span>
+                  <span>Monto</span>
+                  <span>Mes de cuota</span>
+                  <span>Estado</span>
+                </div>
+              <div className="divide-y divide-slate-200 bg-white">
+                {fractionation.cuotas?.map((cuota) => (
+                  <div
+                    key={cuota.id}
+                    className="grid grid-cols-[0.8fr_1fr_1fr_1fr] gap-4 px-5 py-4 text-sm"
+                  >
+                    <span className="font-semibold text-slate-950">
+                      {buildFractionationReference(cuota, fractionation.numeroCuotas)}
+                    </span>
+                    <span className="text-slate-600">{formatCurrency(cuota.monto)}</span>
+                    <span className="text-slate-600">{formatDate(cuota.fechaVencimiento)}</span>
+                    <span>
+                      <span
+                        className={`inline-flex rounded-full px-3 py-1 text-xs font-bold uppercase tracking-[0.16em] ${
+                          cuota.pagada
+                            ? 'bg-emerald-100 text-emerald-700'
+                            : 'bg-amber-100 text-amber-700'
+                        }`}
+                      >
+                        {cuota.pagada ? 'Pagada' : 'Pendiente'}
+                      </span>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        ) : (
+          <form onSubmit={onSubmit} className="mt-5 space-y-5">
+            <div className="grid gap-4 md:grid-cols-[minmax(0,1.2fr)_0.8fr]">
+              <div className="rounded-[24px] border border-slate-200 bg-[linear-gradient(180deg,#fbfcff_0%,#f6f9ff_100%)] p-5">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                  Resumen refinanciable
+                </p>
+                <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                  <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
+                      Total a fraccionar
+                    </p>
+                    <p className="mt-2 text-2xl font-bold tracking-tight text-slate-950">
+                      {formatCurrency(memberDetail.montoFraccionable)}
+                    </p>
+                  </div>
+                  <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
+                      Cuota estimada
+                    </p>
+                    <p className="mt-2 text-2xl font-bold tracking-tight text-slate-950">
+                      {formatCurrency(previewInstallment)}
+                    </p>
+                  </div>
+                </div>
+
+                <p className="mt-5 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                  Periodos a refinanciar
+                </p>
+                <div className="mt-3 space-y-2">
+                  {fractionableRanges.map((range) => (
+                    <div
+                      key={range.key}
+                      className="rounded-2xl bg-rose-50 px-3 py-2 text-sm font-medium text-rose-700"
+                    >
+                      {range.label}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="rounded-[24px] border border-slate-200 bg-white p-5">
+                <label className="block">
+                  <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                    Numero de cuotas
+                  </span>
+                  <input
+                    type="number"
+                    min="2"
+                    max="24"
+                    value={form.numeroCuotas}
+                    onChange={(event) =>
+                      onChange('numeroCuotas', Math.max(Number(event.target.value) || 2, 2))
+                    }
+                    className="mt-3 h-[56px] w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-semibold text-slate-700 outline-none transition focus:border-cobalt focus:bg-white"
+                  />
+                </label>
+
+                <label className="mt-4 block">
+                  <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                    Fecha de inicio
+                  </span>
+                  <input
+                    type="date"
+                    value={form.fechaInicio}
+                    onChange={(event) => onChange('fechaInicio', event.target.value)}
+                    className="mt-3 h-[56px] w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-semibold text-slate-700 outline-none transition focus:border-cobalt focus:bg-white"
+                  />
+                </label>
+
+                <label className="mt-4 block">
+                  <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                    Observacion
+                  </span>
+                  <textarea
+                    value={form.observacion}
+                    onChange={(event) => onChange('observacion', event.target.value)}
+                    rows={4}
+                    placeholder="Referencia del acuerdo o detalle de tesoreria"
+                    className="mt-3 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-cobalt focus:bg-white"
+                  />
+                </label>
+              </div>
+            </div>
+
+            {error ? (
+              <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                {error}
+              </div>
+            ) : null}
+
+            <div className="flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-600 transition hover:border-slate-300"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                disabled={loading}
+                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[linear-gradient(135deg,#1739a6_0%,#204edc_100%)] px-5 py-3 text-sm font-semibold text-white shadow-[0_18px_34px_-24px_rgba(30,64,175,0.95)] transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0"
+              >
+                {loading ? <LoaderCircle size={16} className="animate-spin" /> : null}
+                Crear fraccionamiento
+              </button>
+            </div>
+          </form>
+        )}
+      </div>
+    </div>
+  )
 }
 
 function CobrosRegistrarPage() {
@@ -217,6 +586,14 @@ function CobrosRegistrarPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [receipt, setReceipt] = useState(null)
   const [isPrintSaving, setIsPrintSaving] = useState(false)
+  const [isFractionationModalOpen, setIsFractionationModalOpen] = useState(false)
+  const [fractionationForm, setFractionationForm] = useState({
+    numeroCuotas: 4,
+    fechaInicio: getTodayInLimaISO(),
+    observacion: '',
+  })
+  const [fractionationError, setFractionationError] = useState('')
+  const [isCreatingFractionation, setIsCreatingFractionation] = useState(false)
 
   useEffect(() => {
     let isMounted = true
@@ -327,6 +704,12 @@ function CobrosRegistrarPage() {
         setSelectedMemberDetail(response)
         setDraftItems([])
         setSelectedPeriods([])
+        setFractionationError('')
+        setFractionationForm({
+          numeroCuotas: 4,
+          fechaInicio: getTodayInLimaISO(),
+          observacion: '',
+        })
       } catch (error) {
         if (isMounted) {
           setMemberDetailError(
@@ -352,6 +735,10 @@ function CobrosRegistrarPage() {
   const selectedConcept = useMemo(
     () => concepts.find((item) => String(item.id) === selectedConceptId) ?? null,
     [concepts, selectedConceptId],
+  )
+  const graceWindow = useMemo(
+    () => buildGraceWindow(selectedMemberDetail?.periodosMensuales),
+    [selectedMemberDetail?.periodosMensuales],
   )
 
   useEffect(() => {
@@ -384,6 +771,13 @@ function CobrosRegistrarPage() {
         ? current.filter((value) => value !== periodo)
         : [...current, periodo],
     )
+  }
+
+  function handleFractionationFormChange(field, value) {
+    setFractionationForm((current) => ({
+      ...current,
+      [field]: value,
+    }))
   }
 
   function handleAddItem() {
@@ -446,6 +840,96 @@ function CobrosRegistrarPage() {
     setSubmitError('')
   }
 
+  function handleAddFractionationQuota() {
+    const fractionation = selectedMemberDetail?.fraccionamientoActivo
+    const nextInstallment = fractionation?.siguienteCuota
+
+    if (!fractionation || !nextInstallment) {
+      return
+    }
+
+    setDraftItems((current) => {
+      if (
+        current.some(
+          (item) => item.type === 'FRACCIONAMIENTO' && item.fraccionamientoCuotaId === nextInstallment.id,
+        )
+      ) {
+        setSubmitError('La siguiente cuota del fraccionamiento ya esta agregada al borrador.')
+        return current
+      }
+
+      return [
+        ...current,
+        {
+          id: `fraccionamiento-${nextInstallment.id}`,
+          type: 'FRACCIONAMIENTO',
+          fraccionamientoCuotaId: nextInstallment.id,
+          conceptoId: null,
+          codigo: 'FRAC-CUO',
+          concepto: 'Cuota de fraccionamiento',
+          categoria: 'Fraccionamiento',
+          usaPeriodo: false,
+          periodos: [],
+          quantity: 1,
+          baseAmount: Number(nextInstallment.monto ?? 0),
+          total: Number(nextInstallment.monto ?? 0),
+          itemsCount: 1,
+          referencia: buildFractionationReference(
+            nextInstallment,
+            fractionation.numeroCuotas,
+          ),
+        },
+      ]
+    })
+
+    setSubmitError('')
+  }
+
+  async function handleCreateFractionation(event) {
+    event.preventDefault()
+
+    if (!selectedMemberDetail) {
+      return
+    }
+
+    setIsCreatingFractionation(true)
+    setFractionationError('')
+
+    try {
+      const response = await createTesoreriaFraccionamiento(selectedMemberDetail.id, {
+        numeroCuotas: Number(fractionationForm.numeroCuotas),
+        fechaInicio: fractionationForm.fechaInicio,
+        observacion: fractionationForm.observacion.trim() || null,
+      })
+
+      setSelectedMemberDetail((current) =>
+        current
+          ? {
+              ...current,
+              fraccionamientoActivo: response,
+              puedeCrearFraccionamiento: false,
+            }
+          : current,
+      )
+      setIsFractionationModalOpen(false)
+      setFractionationForm({
+        numeroCuotas: 4,
+        fechaInicio: getTodayInLimaISO(),
+        observacion: '',
+      })
+      setSubmitError('')
+
+      const detailResponse = await getTesoreriaColegiadoCobranza(selectedMemberDetail.id)
+      setSelectedMemberDetail(detailResponse)
+    } catch (error) {
+      setFractionationError(
+        error instanceof Error ? error.message : 'No se pudo crear el fraccionamiento.',
+      )
+    } finally {
+      setIsCreatingFractionation(false)
+    }
+  }
+
   async function handleSubmit(event) {
     event.preventDefault()
 
@@ -476,9 +960,23 @@ function CobrosRegistrarPage() {
           paymentOptions.find((item) => item.value === paymentMethod)?.requestValue ?? 'EFECTIVO',
         observacion: observation.trim() || null,
         items: draftItems.flatMap((item) => {
+          if (item.type === 'FRACCIONAMIENTO') {
+            return [
+              {
+                conceptoCobroId: null,
+                fraccionamientoCuotaId: item.fraccionamientoCuotaId,
+                periodoReferencia: null,
+                cantidad: 1,
+                descuento: '0.00',
+                mora: '0.00',
+              },
+            ]
+          }
+
           if (item.usaPeriodo) {
             return item.periodos.map((period) => ({
               conceptoCobroId: item.conceptoId,
+              fraccionamientoCuotaId: null,
               periodoReferencia: period.periodo,
               cantidad: 1,
               descuento: '0.00',
@@ -489,6 +987,7 @@ function CobrosRegistrarPage() {
           return [
             {
               conceptoCobroId: item.conceptoId,
+              fraccionamientoCuotaId: null,
               periodoReferencia: null,
               cantidad: item.quantity,
               descuento: '0.00',
@@ -744,21 +1243,93 @@ function CobrosRegistrarPage() {
                 </div>
               </div>
 
-              <div className="mt-3.5 rounded-[20px] bg-[#111a33] px-3.5 py-3.5 text-white">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-300">
-                  Estado proyectado
-                </p>
-                <p className="mt-1.5 text-sm leading-6 text-slate-100">
-                  {selectedMemberDetail.habilitadoHasta
-                    ? `Habilitado hasta ${formatDate(selectedMemberDetail.habilitadoHasta)}.`
-                    : 'Aun no registra un pago que habilite.'}
-                </p>
-                {selectedMemberDetail.ultimoPeriodoPagado ? (
-                  <p className="mt-1.5 text-xs text-slate-300 sm:text-sm">
-                    Ultimo periodo pagado: {selectedMemberDetail.ultimoPeriodoPagado}
+                <div className="mt-3.5 rounded-[20px] bg-[#111a33] px-3.5 py-3.5 text-white">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-300">
+                    Estado proyectado
+                  </p>
+                  <p className="mt-1.5 text-sm leading-6 text-slate-100">
+                    {graceWindow
+                      ? `Habilitado hasta ${formatDate(selectedMemberDetail.habilitadoHasta)}.`
+                      : selectedMemberDetail.habilitadoHasta
+                        ? `Habilitado hasta ${formatDate(selectedMemberDetail.habilitadoHasta)}.`
+                        : 'Aun no registra un pago que habilite.'}
+                  </p>
+                  {selectedMemberDetail.ultimoPeriodoPagado ? (
+                    <p className="mt-1.5 text-xs text-slate-300 sm:text-sm">
+                      Ultimo periodo pagado: {selectedMemberDetail.ultimoPeriodoPagado}
                   </p>
                 ) : null}
               </div>
+
+              {selectedMemberDetail.fraccionamientoActivo ? (
+                <div className="mt-3.5 rounded-[20px] border border-fuchsia-200 bg-fuchsia-50 px-3.5 py-3.5">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-fuchsia-700">
+                        Fraccionamiento activo
+                      </p>
+                      <p className="mt-1.5 text-sm font-semibold text-slate-950">
+                        {selectedMemberDetail.fraccionamientoActivo.cuotasPagadas}/
+                        {selectedMemberDetail.fraccionamientoActivo.numeroCuotas} cuotas pagadas
+                      </p>
+                      <p className="mt-1 text-xs text-slate-600">
+                        Saldo refinanciado pendiente:{' '}
+                        {formatCurrency(selectedMemberDetail.fraccionamientoActivo.saldoPendiente)}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setIsFractionationModalOpen(true)}
+                      className="rounded-2xl border border-fuchsia-200 bg-white px-3 py-2 text-xs font-semibold text-fuchsia-700 transition hover:border-fuchsia-300"
+                    >
+                      Ver detalle
+                    </button>
+                  </div>
+
+                  {selectedMemberDetail.fraccionamientoActivo.siguienteCuota ? (
+                    <div className="mt-3 rounded-2xl border border-fuchsia-200 bg-white px-3 py-3">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+                        Siguiente cuota sugerida
+                      </p>
+                      <p className="mt-1.5 text-sm font-semibold text-slate-950">
+                        {buildFractionationReference(
+                          selectedMemberDetail.fraccionamientoActivo.siguienteCuota,
+                          selectedMemberDetail.fraccionamientoActivo.numeroCuotas,
+                        )}{' '}
+                        ·{' '}
+                        {formatCurrency(
+                          selectedMemberDetail.fraccionamientoActivo.siguienteCuota.monto,
+                        )}
+                      </p>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={handleAddFractionationQuota}
+                          className="rounded-2xl bg-[linear-gradient(135deg,#1739a6_0%,#204edc_100%)] px-4 py-2 text-xs font-semibold text-white shadow-[0_18px_34px_-24px_rgba(30,64,175,0.95)] transition hover:-translate-y-0.5"
+                        >
+                          Agregar cuota
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              ) : selectedMemberDetail.puedeCrearFraccionamiento ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFractionationError('')
+                    setFractionationForm({
+                      numeroCuotas: 4,
+                      fechaInicio: getTodayInLimaISO(),
+                      observacion: '',
+                    })
+                    setIsFractionationModalOpen(true)
+                  }}
+                  className="mt-3.5 inline-flex w-full items-center justify-center rounded-2xl border border-fuchsia-200 bg-fuchsia-50 px-4 py-3 text-sm font-semibold text-fuchsia-700 transition hover:bg-fuchsia-100"
+                >
+                  Crear fraccionamiento
+                </button>
+              ) : null}
             </div>
           ) : (
             <div className="mt-6 rounded-[26px] border border-slate-200 bg-slate-50 px-5 py-12 text-center text-sm text-slate-500">
@@ -905,6 +1476,11 @@ function CobrosRegistrarPage() {
                       <span className="rounded-full bg-cobalt-soft px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-cobalt">
                         {item.codigo}
                       </span>
+                      {item.referencia ? (
+                        <span className="rounded-full bg-fuchsia-50 px-3 py-1 text-xs font-semibold text-fuchsia-700">
+                          {item.referencia}
+                        </span>
+                      ) : null}
                     </div>
                     <p className="mt-2 text-sm text-slate-500">{item.categoria}</p>
                     {item.periodos.length > 0 ? (
@@ -1077,6 +1653,18 @@ function CobrosRegistrarPage() {
         </article>
       </form>
 
+      {isFractionationModalOpen ? (
+        <FractionationModal
+          memberDetail={selectedMemberDetail}
+          form={fractionationForm}
+          onChange={handleFractionationFormChange}
+          onClose={() => setIsFractionationModalOpen(false)}
+          onSubmit={handleCreateFractionation}
+          loading={isCreatingFractionation}
+          error={fractionationError}
+        />
+      ) : null}
+
       {receipt ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-sm">
           <div className="max-h-[92vh] w-full max-w-4xl overflow-y-auto rounded-[32px] border border-white/80 bg-white p-6 shadow-[0_30px_80px_-40px_rgba(15,23,42,0.85)] sm:p-7">
@@ -1142,7 +1730,7 @@ function CobrosRegistrarPage() {
             <div className="mt-5 overflow-hidden rounded-[24px] border border-slate-200">
               <div className="grid grid-cols-[1.6fr_0.9fr_0.7fr_0.8fr_0.8fr] gap-4 bg-slate-50 px-5 py-4 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
                 <span>Concepto</span>
-                <span>Periodo</span>
+                <span>Referencia</span>
                 <span>Cantidad</span>
                 <span>Monto unitario</span>
                 <span>Total</span>

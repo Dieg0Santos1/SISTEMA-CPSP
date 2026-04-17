@@ -10,11 +10,13 @@ import pe.cpsp.sistema.colegiados.api.dto.ColegiadoResponse;
 import pe.cpsp.sistema.colegiados.application.ColegiadoService;
 import pe.cpsp.sistema.colegiados.domain.model.Colegiado;
 import pe.cpsp.sistema.colegiados.infrastructure.persistence.repository.ColegiadoRepository;
+import pe.cpsp.sistema.common.exception.DuplicateResourceException;
 import pe.cpsp.sistema.common.exception.InvalidRequestException;
 import pe.cpsp.sistema.common.exception.ResourceNotFoundException;
 import pe.cpsp.sistema.inventario.api.dto.InventarioDashboardResponse;
 import pe.cpsp.sistema.inventario.api.dto.InventarioEntregaMemberResponse;
 import pe.cpsp.sistema.inventario.api.dto.InventarioMovimientoResponse;
+import pe.cpsp.sistema.inventario.api.dto.InventarioProductoCreateRequest;
 import pe.cpsp.sistema.inventario.api.dto.InventarioProductoDetailResponse;
 import pe.cpsp.sistema.inventario.api.dto.InventarioProductoListItemResponse;
 import pe.cpsp.sistema.inventario.domain.model.InventarioEntrega;
@@ -71,6 +73,38 @@ public class InventarioService {
     return toDetail(producto);
   }
 
+  public InventarioProductoListItemResponse crearProducto(InventarioProductoCreateRequest request) {
+    String normalizedCode = request.codigo().trim().toUpperCase();
+
+    if (inventarioProductoRepository.existsByCodigoIgnoreCase(normalizedCode)) {
+      throw new DuplicateResourceException("Ya existe un producto con ese codigo.");
+    }
+
+    InventarioProducto producto = new InventarioProducto();
+    producto.setCodigo(normalizedCode);
+    producto.setNombre(request.nombre().trim());
+    producto.setCategoria(request.categoria().trim());
+    producto.setDescripcion(
+        request.descripcion() == null || request.descripcion().isBlank()
+            ? null
+            : request.descripcion().trim());
+    producto.setPrecioReferencia(request.precioReferencia());
+    producto.setStockActual(request.stockInicial());
+    producto.setActivo(true);
+
+    InventarioProducto savedProduct = inventarioProductoRepository.save(producto);
+
+    if (request.stockInicial() > 0) {
+      registrarMovimiento(
+          savedProduct,
+          "INGRESO",
+          "Stock inicial registrado al crear el producto",
+          request.stockInicial());
+    }
+
+    return toListItem(savedProduct);
+  }
+
   public InventarioProductoDetailResponse registrarEntrega(Long productoId, Long colegiadoId) {
     InventarioProducto producto = findProducto(productoId);
     Colegiado colegiado = findColegiado(colegiadoId);
@@ -98,7 +132,11 @@ public class InventarioService {
     producto.setStockActual(producto.getStockActual() - 1);
     inventarioProductoRepository.save(producto);
 
-    registrarMovimiento(producto, "ENTREGA", "Entrega confirmada a colegiado habilitado", -1);
+    registrarMovimiento(
+        producto,
+        "ENTREGA",
+        "Entrega confirmada a " + colegiadoEstado.nombreCompleto(),
+        -1);
 
     return getProductoDetail(productoId);
   }
@@ -115,7 +153,11 @@ public class InventarioService {
               producto.getEntregas().removeIf(item -> item.getId().equals(entrega.getId()));
               producto.setStockActual(producto.getStockActual() + 1);
               inventarioProductoRepository.save(producto);
-              registrarMovimiento(producto, "REVERSA_ENTREGA", "Reversion de entrega registrada", 1);
+              registrarMovimiento(
+                  producto,
+                  "REVERSA_ENTREGA",
+                  "Reversion de entrega de " + buildNombreCompleto(entrega.getColegiado()),
+                  1);
             });
 
     return getProductoDetail(productoId);
@@ -131,6 +173,15 @@ public class InventarioService {
     return colegiadoRepository
         .findById(colegiadoId)
         .orElseThrow(() -> new ResourceNotFoundException("No existe el colegiado solicitado."));
+  }
+
+  private String buildNombreCompleto(Colegiado colegiado) {
+    return String.join(
+            " ",
+            colegiado.getNombre(),
+            colegiado.getApellidoPaterno(),
+            colegiado.getApellidoMaterno())
+        .trim();
   }
 
   private void registrarMovimiento(

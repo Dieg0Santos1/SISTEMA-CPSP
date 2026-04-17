@@ -25,11 +25,16 @@ import pe.cpsp.sistema.tesoreria.domain.model.CobroDetalle;
 import pe.cpsp.sistema.tesoreria.domain.model.ComprobanteSerie;
 import pe.cpsp.sistema.tesoreria.domain.model.ConceptoCobro;
 import pe.cpsp.sistema.tesoreria.domain.model.EstadoConceptoCobro;
+import pe.cpsp.sistema.tesoreria.domain.model.EstadoFraccionamiento;
+import pe.cpsp.sistema.tesoreria.domain.model.EstadoFraccionamientoCuota;
+import pe.cpsp.sistema.tesoreria.domain.model.Fraccionamiento;
+import pe.cpsp.sistema.tesoreria.domain.model.FraccionamientoCuota;
 import pe.cpsp.sistema.tesoreria.domain.model.MetodoPago;
 import pe.cpsp.sistema.tesoreria.domain.model.TipoComprobante;
 import pe.cpsp.sistema.tesoreria.infrastructure.persistence.repository.CobroRepository;
 import pe.cpsp.sistema.tesoreria.infrastructure.persistence.repository.ComprobanteSerieRepository;
 import pe.cpsp.sistema.tesoreria.infrastructure.persistence.repository.ConceptoCobroRepository;
+import pe.cpsp.sistema.tesoreria.infrastructure.persistence.repository.FraccionamientoRepository;
 
 @Service
 @Transactional
@@ -39,6 +44,7 @@ public class TesoreriaCobroService {
   private final CobroRepository cobroRepository;
   private final ConceptoCobroRepository conceptoCobroRepository;
   private final ComprobanteSerieRepository comprobanteSerieRepository;
+  private final FraccionamientoRepository fraccionamientoRepository;
   private final TesoreriaSupport tesoreriaSupport;
   private final Clock appClock;
 
@@ -47,12 +53,14 @@ public class TesoreriaCobroService {
       CobroRepository cobroRepository,
       ConceptoCobroRepository conceptoCobroRepository,
       ComprobanteSerieRepository comprobanteSerieRepository,
+      FraccionamientoRepository fraccionamientoRepository,
       TesoreriaSupport tesoreriaSupport,
       Clock appClock) {
     this.colegiadoRepository = colegiadoRepository;
     this.cobroRepository = cobroRepository;
     this.conceptoCobroRepository = conceptoCobroRepository;
     this.comprobanteSerieRepository = comprobanteSerieRepository;
+    this.fraccionamientoRepository = fraccionamientoRepository;
     this.tesoreriaSupport = tesoreriaSupport;
     this.appClock = appClock;
   }
@@ -79,17 +87,24 @@ public class TesoreriaCobroService {
         conceptoCobroRepository
             .findByCodigo(TesoreriaSupport.CODIGO_APORTACION_MENSUAL)
             .orElseThrow(() -> new ResourceNotFoundException("No existe el concepto de aportacion."));
+    ConceptoCobro fraccionamientoConcept =
+        conceptoCobroRepository
+            .findByCodigo(TesoreriaSupport.CODIGO_FRACCIONAMIENTO)
+            .orElseThrow(() -> new ResourceNotFoundException("No existe el concepto de fraccionamiento."));
 
     List<Cobro> memberCobros =
         cobroRepository.findAllWithDetails().stream()
             .filter(cobro -> Objects.equals(cobro.getColegiado().getId(), colegiado.getId()))
             .toList();
+    List<Fraccionamiento> memberFraccionamientos =
+        fraccionamientoRepository.findAllByColegiadoIdWithRelations(colegiado.getId());
 
     LocalDate calculationDate = request.fechaEmision() != null ? request.fechaEmision() : LocalDate.now(appClock);
     TesoreriaSupport.CobranzaProfile profile =
         tesoreriaSupport.buildProfile(
             colegiado,
             memberCobros,
+            memberFraccionamientos,
             calculationDate,
             ceremoniaConcept.getMontoBase(),
             aportacionConcept.getMontoBase());
@@ -118,17 +133,37 @@ public class TesoreriaCobroService {
     BigDecimal moraTotal = BigDecimal.ZERO;
 
     List<CobroDetalle> detalles = new ArrayList<>();
+    List<FraccionamientoCuota> cuotasPagadasEnCobro = new ArrayList<>();
     for (RegistrarCobroItemRequest itemRequest : request.items()) {
-      ConceptoCobro concepto =
-          conceptoCobroRepository
-              .findById(itemRequest.conceptoCobroId())
-              .orElseThrow(() -> new ResourceNotFoundException("No existe el concepto seleccionado."));
+      ConceptoCobro concepto;
+      FraccionamientoCuota cuotaFraccionamiento = null;
+      String referencia = cleanNullable(itemRequest.periodoReferencia());
+      BigDecimal montoUnitario;
+      int cantidad = itemRequest.cantidad();
+
+      if (itemRequest.fraccionamientoCuotaId() != null) {
+        cuotaFraccionamiento = findPendingCuotaForMember(itemRequest.fraccionamientoCuotaId(), colegiado.getId());
+        concepto = fraccionamientoConcept;
+        referencia =
+            "Cuota "
+                + cuotaFraccionamiento.getNumeroCuota()
+                + "/"
+                + cuotaFraccionamiento.getFraccionamiento().getNumeroCuotas();
+        montoUnitario = cuotaFraccionamiento.getMonto();
+        cantidad = 1;
+      } else {
+        concepto =
+            conceptoCobroRepository
+                .findById(itemRequest.conceptoCobroId())
+                .orElseThrow(() -> new ResourceNotFoundException("No existe el concepto seleccionado."));
+        montoUnitario = concepto.getMontoBase();
+      }
 
       if (concepto.getEstado() != EstadoConceptoCobro.ACTIVO) {
         throw new InvalidRequestException("Solo se pueden registrar conceptos activos.");
       }
 
-      if (concepto.isUsaPeriodo()) {
+      if (itemRequest.fraccionamientoCuotaId() == null && concepto.isUsaPeriodo()) {
         validateMonthlyItem(concepto, itemRequest, profile);
       }
 
@@ -136,20 +171,25 @@ public class TesoreriaCobroService {
         throw new InvalidRequestException("La ceremonia de colegiatura ya fue pagada.");
       }
 
-      BigDecimal gross =
-          concepto.getMontoBase().multiply(BigDecimal.valueOf(itemRequest.cantidad().longValue()));
+      BigDecimal gross = montoUnitario.multiply(BigDecimal.valueOf(cantidad));
       BigDecimal lineTotal = gross.subtract(itemRequest.descuento()).add(itemRequest.mora());
 
       CobroDetalle detalle = new CobroDetalle();
       detalle.setCobro(cobro);
       detalle.setConceptoCobro(concepto);
-      detalle.setPeriodoReferencia(cleanNullable(itemRequest.periodoReferencia()));
-      detalle.setCantidad(itemRequest.cantidad());
-      detalle.setMontoUnitario(concepto.getMontoBase());
+      detalle.setPeriodoReferencia(referencia);
+      detalle.setCantidad(cantidad);
+      detalle.setMontoUnitario(montoUnitario);
       detalle.setDescuento(itemRequest.descuento());
       detalle.setMora(itemRequest.mora());
       detalle.setTotalLinea(lineTotal);
       detalles.add(detalle);
+      if (cuotaFraccionamiento != null) {
+        cuotasPagadasEnCobro.add(cuotaFraccionamiento);
+        cuotaFraccionamiento.setCobroDetalle(detalle);
+        cuotaFraccionamiento.setFechaPago(calculationDate);
+        cuotaFraccionamiento.setEstado(EstadoFraccionamientoCuota.PAGADA);
+      }
 
       subtotal = subtotal.add(gross);
       descuentoTotal = descuentoTotal.add(itemRequest.descuento());
@@ -163,6 +203,10 @@ public class TesoreriaCobroService {
     cobro.setDetalles(detalles);
 
     Cobro saved = cobroRepository.save(cobro);
+    cuotasPagadasEnCobro.stream()
+        .map(FraccionamientoCuota::getFraccionamiento)
+        .distinct()
+        .forEach(this::refreshFraccionamientoState);
     serie.setCorrelativoActual(saved.getNumeroComprobante());
     comprobanteSerieRepository.save(serie);
 
@@ -212,6 +256,7 @@ public class TesoreriaCobroService {
     boolean containsCeremony =
         items.stream()
             .map(RegistrarCobroItemRequest::conceptoCobroId)
+            .filter(Objects::nonNull)
             .map(conceptoCobroRepository::findById)
             .flatMap(Optional::stream)
             .anyMatch(concept -> TesoreriaSupport.CODIGO_CEREMONIA.equals(concept.getCodigo()));
@@ -220,6 +265,7 @@ public class TesoreriaCobroService {
       boolean containsMonthly =
           items.stream()
               .map(RegistrarCobroItemRequest::conceptoCobroId)
+              .filter(Objects::nonNull)
               .map(conceptoCobroRepository::findById)
               .flatMap(Optional::stream)
               .anyMatch(concept -> TesoreriaSupport.CODIGO_APORTACION_MENSUAL.equals(concept.getCodigo()));
@@ -232,19 +278,33 @@ public class TesoreriaCobroService {
 
     for (RegistrarCobroItemRequest item : items) {
       ConceptoCobro concepto =
-          conceptoCobroRepository
-              .findById(item.conceptoCobroId())
-              .orElseThrow(() -> new ResourceNotFoundException("No existe el concepto seleccionado."));
+          item.conceptoCobroId() == null
+              ? null
+              : conceptoCobroRepository
+                  .findById(item.conceptoCobroId())
+                  .orElseThrow(
+                      () -> new ResourceNotFoundException("No existe el concepto seleccionado."));
 
-      if (TesoreriaSupport.CODIGO_CEREMONIA.equals(concepto.getCodigo()) && containsCeremony && item.cantidad() > 1) {
+      if (item.fraccionamientoCuotaId() == null && concepto == null) {
+        throw new InvalidRequestException("Debes seleccionar un concepto valido para el cobro.");
+      }
+
+      if (concepto != null
+          && TesoreriaSupport.CODIGO_CEREMONIA.equals(concepto.getCodigo())
+          && containsCeremony
+          && item.cantidad() > 1) {
         throw new InvalidRequestException("La ceremonia solo puede registrarse una vez por cobro.");
       }
 
-      if (TesoreriaSupport.CODIGO_APORTACION_MENSUAL.equals(concepto.getCodigo())) {
+      if (concepto != null && TesoreriaSupport.CODIGO_APORTACION_MENSUAL.equals(concepto.getCodigo())) {
         String period = clean(item.periodoReferencia());
         if (!monthlyPeriods.add(period)) {
           throw new InvalidRequestException("No se puede repetir el mismo periodo mensual en un cobro.");
         }
+      }
+
+      if (item.fraccionamientoCuotaId() != null && item.cantidad() != 1) {
+        throw new InvalidRequestException("Cada cuota de fraccionamiento se registra con cantidad 1.");
       }
     }
   }
@@ -322,5 +382,28 @@ public class TesoreriaCobroService {
   private String cleanNullable(String value) {
     String cleaned = clean(value);
     return cleaned.isBlank() ? null : cleaned;
+  }
+
+  private FraccionamientoCuota findPendingCuotaForMember(Long cuotaId, Long colegiadoId) {
+    return fraccionamientoRepository.findAllByColegiadoIdWithRelations(colegiadoId).stream()
+        .filter(fraccionamiento -> fraccionamiento.getEstado() == EstadoFraccionamiento.ACTIVO)
+        .flatMap(fraccionamiento -> fraccionamiento.getCuotas().stream())
+        .filter(cuota -> cuotaId.equals(cuota.getId()))
+        .filter(cuota -> cuota.getEstado() == EstadoFraccionamientoCuota.PENDIENTE)
+        .findFirst()
+        .orElseThrow(
+            () ->
+                new InvalidRequestException(
+                    "La cuota de fraccionamiento seleccionada no esta disponible para cobro."));
+  }
+
+  private void refreshFraccionamientoState(Fraccionamiento fraccionamiento) {
+    boolean allPaid =
+        fraccionamiento.getCuotas().stream()
+            .allMatch(cuota -> cuota.getEstado() == EstadoFraccionamientoCuota.PAGADA);
+    if (allPaid) {
+      fraccionamiento.setEstado(EstadoFraccionamiento.PAGADO);
+      fraccionamientoRepository.save(fraccionamiento);
+    }
   }
 }

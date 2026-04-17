@@ -7,6 +7,7 @@ import {
   ClipboardList,
   FileText,
   Plus,
+  Search,
   Users,
   X,
 } from 'lucide-react'
@@ -35,12 +36,6 @@ const formatEventDate = (value) =>
     minute: '2-digit',
   }).format(new Date(value))
 
-const formatShortDate = (value) =>
-  new Intl.DateTimeFormat('es-PE', {
-    day: '2-digit',
-    month: 'short',
-  }).format(new Date(value))
-
 const sortEventsByDate = (items) =>
   [...items].sort((left, right) => new Date(left.fechaHora) - new Date(right.fechaHora))
 
@@ -67,6 +62,7 @@ function EventosOverviewPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isUpdatingAttendance, setIsUpdatingAttendance] = useState('')
   const [errorMessage, setErrorMessage] = useState('')
+  const [memberSearch, setMemberSearch] = useState('')
 
   const loadEvents = async (preferredEventId = null) => {
     setIsLoadingEvents(true)
@@ -207,6 +203,23 @@ function EventosOverviewPage() {
     availableMembersCount === 0
       ? 0
       : Math.round((attendedMembersCount / availableMembersCount) * 100)
+  const filteredMembers = useMemo(() => {
+    if (!selectedEvent) {
+      return []
+    }
+
+    const normalizedSearch = memberSearch.trim().toLowerCase()
+
+    if (!normalizedSearch) {
+      return selectedEvent.colegiados
+    }
+
+    return selectedEvent.colegiados.filter((member) =>
+      [member.nombreCompleto, member.codigoColegiatura]
+        .filter(Boolean)
+        .some((value) => value.toLowerCase().includes(normalizedSearch)),
+    )
+  }, [memberSearch, selectedEvent])
 
   const handleInputChange = (event) => {
     const { name, value } = event.target
@@ -407,7 +420,7 @@ function EventosOverviewPage() {
           </button>
         </div>
 
-        <div className="mt-6 grid gap-6 2xl:grid-cols-[430px_minmax(0,1fr)]">
+        <div className="mt-6 grid gap-6 2xl:grid-cols-[350px_minmax(0,1fr)]">
           <article className="rounded-[28px] border border-slate-200 bg-[linear-gradient(180deg,#f8fbff_0%,#ffffff_100%)] p-4 sm:p-5">
             <div className="mb-4 flex items-center justify-between">
               <div>
@@ -419,9 +432,6 @@ function EventosOverviewPage() {
                 </p>
               </div>
 
-              <span className="rounded-full bg-cobalt-soft px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-cobalt">
-                Backend
-              </span>
             </div>
 
             {isLoadingEvents ? (
@@ -444,32 +454,8 @@ function EventosOverviewPage() {
                           : 'border-slate-200 bg-white text-slate-900 hover:border-slate-300 hover:bg-slate-50'
                       }`}
                     >
-                      <div className="flex items-start justify-between gap-4">
-                        <div>
-                          <p className="text-xs font-bold uppercase tracking-[0.18em] opacity-70">
-                            {formatShortDate(eventItem.fechaHora)}
-                          </p>
-                          <p className="mt-2 text-lg font-semibold tracking-tight">
-                            {eventItem.nombre}
-                          </p>
-                        </div>
-
-                        <span
-                          className={`rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] ${
-                            isActive
-                              ? 'bg-white/15 text-white'
-                              : 'bg-cobalt-soft text-cobalt'
-                          }`}
-                        >
-                          {eventItem.asistenciasRegistradas} asistencias
-                        </span>
-                      </div>
-
-                      <p className="mt-3 text-sm leading-6 opacity-85">
-                        {eventItem.descripcion}
-                      </p>
-                      <p className="mt-3 text-sm font-medium opacity-85">
-                        {formatEventDate(eventItem.fechaHora)}
+                      <p className="text-lg font-semibold tracking-tight">
+                        {eventItem.nombre}
                       </p>
                     </button>
                   )
@@ -562,7 +548,23 @@ function EventosOverviewPage() {
                   </article>
                 </div>
 
-                <div className="mt-6 overflow-hidden rounded-[26px] border border-slate-200">
+                <div className="mt-6">
+                  <label className="group flex w-full items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 transition focus-within:border-cobalt focus-within:bg-white">
+                    <Search
+                      size={18}
+                      className="text-slate-400 transition group-focus-within:text-cobalt"
+                    />
+                    <input
+                      type="search"
+                      value={memberSearch}
+                      onChange={(event) => setMemberSearch(event.target.value)}
+                      placeholder="Buscar colegiado por codigo o nombre"
+                      className="w-full bg-transparent text-sm font-medium text-slate-700 outline-none placeholder:text-slate-400"
+                    />
+                  </label>
+                </div>
+
+                <div className="mt-4 overflow-hidden rounded-[26px] border border-slate-200">
                   <div className="hidden grid-cols-[92px_1.3fr_1fr_0.9fr_90px] bg-[#e9f0ff] px-6 py-4 text-[11px] font-bold uppercase tracking-[0.22em] text-slate-500 lg:grid">
                     <span>Check</span>
                     <span>Colegiado</span>
@@ -572,7 +574,7 @@ function EventosOverviewPage() {
                   </div>
 
                   <div className="divide-y divide-slate-200 bg-white">
-                    {selectedEvent.colegiados.map((member, index) => {
+                    {filteredMembers.map((member, index) => {
                       const isChecked = member.asistio
                       const isUpdating = isUpdatingAttendance === String(member.colegiadoId)
 
@@ -643,6 +645,12 @@ function EventosOverviewPage() {
                         </label>
                       )
                     })}
+
+                    {filteredMembers.length === 0 ? (
+                      <div className="px-5 py-10 text-center text-sm text-slate-500">
+                        No encontramos colegiados con ese criterio de busqueda.
+                      </div>
+                    ) : null}
                   </div>
                 </div>
               </>

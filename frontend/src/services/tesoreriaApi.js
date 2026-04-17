@@ -59,8 +59,39 @@ export async function getTesoreriaColegiadoCobranza(colegiadoId) {
   return requestJson(`/tesoreria/colegiados/${colegiadoId}/cobranza`)
 }
 
+export async function createTesoreriaFraccionamiento(colegiadoId, payload) {
+  return requestJson(`/tesoreria/colegiados/${colegiadoId}/fraccionamiento`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
 export async function getTesoreriaConceptosCobro() {
   return requestJson('/tesoreria/conceptos-cobro')
+}
+
+export async function getTesoreriaConceptosCobroCatalogo() {
+  return requestJson('/tesoreria/conceptos-cobro/catalogo')
+}
+
+export async function createTesoreriaConceptoCobro(payload) {
+  return requestJson('/tesoreria/conceptos-cobro', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function updateTesoreriaConceptoCobro(conceptoId, payload) {
+  return requestJson(`/tesoreria/conceptos-cobro/${conceptoId}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function deleteTesoreriaConceptoCobro(conceptoId) {
+  return requestJson(`/tesoreria/conceptos-cobro/${conceptoId}`, {
+    method: 'DELETE',
+  })
 }
 
 export async function postTesoreriaCobro(payload) {

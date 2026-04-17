@@ -7,6 +7,8 @@ import pe.cpsp.sistema.tesoreria.domain.model.CobroDetalle;
 
 public interface CobroDetalleRepository extends JpaRepository<CobroDetalle, Long> {
 
+  boolean existsByConceptoCobroId(Long conceptoCobroId);
+
   @Query(
       """
       select detalle
