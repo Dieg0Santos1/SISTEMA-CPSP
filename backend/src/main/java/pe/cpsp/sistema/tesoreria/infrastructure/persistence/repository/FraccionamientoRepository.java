@@ -13,6 +13,17 @@ public interface FraccionamientoRepository extends JpaRepository<Fraccionamiento
       """
       select distinct fraccionamiento
       from Fraccionamiento fraccionamiento
+      join fetch fraccionamiento.colegiado
+      left join fetch fraccionamiento.cuotas
+      left join fetch fraccionamiento.periodos
+      order by fraccionamiento.id desc
+      """)
+  List<Fraccionamiento> findAllWithRelations();
+
+  @Query(
+      """
+      select distinct fraccionamiento
+      from Fraccionamiento fraccionamiento
       left join fetch fraccionamiento.cuotas
       left join fetch fraccionamiento.periodos
       where fraccionamiento.colegiado.id = :colegiadoId
@@ -37,6 +48,7 @@ public interface FraccionamientoRepository extends JpaRepository<Fraccionamiento
       """
       select distinct fraccionamiento
       from Fraccionamiento fraccionamiento
+      join fetch fraccionamiento.colegiado
       left join fetch fraccionamiento.cuotas
       left join fetch fraccionamiento.periodos
       where fraccionamiento.id = :fraccionamientoId

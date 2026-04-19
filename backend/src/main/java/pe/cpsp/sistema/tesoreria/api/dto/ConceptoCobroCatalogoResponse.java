@@ -7,4 +7,4 @@ public record ConceptoCobroCatalogoResponse(
     long activos,
     long categorias,
     long afectanHabilitacion,
-    long exoneradosIgv) {}
+    long descuentosConfigurados) {}

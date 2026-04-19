@@ -22,11 +22,6 @@ const emptyForm = {
   description: '',
 }
 
-const statusStyles = {
-  HABILITADO: 'bg-emerald-100 text-emerald-700',
-  NO_HABILITADO: 'bg-red-100 text-red-600',
-}
-
 const formatEventDate = (value) =>
   new Intl.DateTimeFormat('es-PE', {
     day: '2-digit',
@@ -41,9 +36,6 @@ const sortEventsByDate = (items) =>
 
 const isSameMonth = (date, baseDate) =>
   date.getMonth() === baseDate.getMonth() && date.getFullYear() === baseDate.getFullYear()
-
-const formatStatusLabel = (status) =>
-  status === 'HABILITADO' ? 'Habilitado' : 'No habilitado'
 
 const readErrorMessage = async (response, fallbackMessage) => {
   const payload = await response.json().catch(() => null)
@@ -63,6 +55,7 @@ function EventosOverviewPage() {
   const [isUpdatingAttendance, setIsUpdatingAttendance] = useState('')
   const [errorMessage, setErrorMessage] = useState('')
   const [memberSearch, setMemberSearch] = useState('')
+  const [participantsPage, setParticipantsPage] = useState(1)
 
   const loadEvents = async (preferredEventId = null) => {
     setIsLoadingEvents(true)
@@ -198,7 +191,7 @@ function EventosOverviewPage() {
     [events, currentDate],
   )
   const attendedMembersCount = selectedEvent?.asistenciasRegistradas ?? 0
-  const availableMembersCount = selectedEvent?.colegiados.length ?? 0
+  const availableMembersCount = selectedEvent?.participantes.length ?? 0
   const attendancePercent =
     availableMembersCount === 0
       ? 0
@@ -211,15 +204,30 @@ function EventosOverviewPage() {
     const normalizedSearch = memberSearch.trim().toLowerCase()
 
     if (!normalizedSearch) {
-      return selectedEvent.colegiados
+      return selectedEvent.participantes
     }
 
-    return selectedEvent.colegiados.filter((member) =>
-      [member.nombreCompleto, member.codigoColegiatura]
+    return selectedEvent.participantes.filter((member) =>
+      [member.nombreCompleto, member.codigo, member.documento, member.detalle]
         .filter(Boolean)
         .some((value) => value.toLowerCase().includes(normalizedSearch)),
     )
   }, [memberSearch, selectedEvent])
+
+  const participantsPageSize = 5
+  const totalParticipantsPages = Math.max(
+    1,
+    Math.ceil(filteredMembers.length / participantsPageSize),
+  )
+  const safeParticipantsPage = Math.min(participantsPage, totalParticipantsPages)
+  const paginatedMembers = filteredMembers.slice(
+    (safeParticipantsPage - 1) * participantsPageSize,
+    safeParticipantsPage * participantsPageSize,
+  )
+
+  useEffect(() => {
+    setParticipantsPage(1)
+  }, [memberSearch, selectedEvent?.id, filteredMembers.length])
 
   const handleInputChange = (event) => {
     const { name, value } = event.target
@@ -268,17 +276,17 @@ function EventosOverviewPage() {
     }
   }
 
-  const handleToggleMember = async (memberId, isChecked) => {
+  const handleToggleMember = async (member, isChecked) => {
     if (!selectedEvent) {
       return
     }
 
-    setIsUpdatingAttendance(String(memberId))
+    setIsUpdatingAttendance(`${member.tipoRegistro}-${member.personaId}`)
     setErrorMessage('')
 
     try {
       const response = await fetch(
-        `${API_BASE_URL}/eventos/${selectedEvent.id}/asistencias/${memberId}`,
+        `${API_BASE_URL}/eventos/${selectedEvent.id}/asistencias/${member.personaId}?tipo=${member.tipoRegistro}`,
         {
           method: isChecked ? 'DELETE' : 'PUT',
           credentials: 'include',
@@ -289,7 +297,7 @@ function EventosOverviewPage() {
         throw new Error(
           await readErrorMessage(
             response,
-            'No se pudo actualizar la asistencia del colegiado.',
+            'No se pudo actualizar la asistencia del participante.',
           ),
         )
       }
@@ -313,7 +321,7 @@ function EventosOverviewPage() {
       setErrorMessage(
         error instanceof Error
           ? error.message
-          : 'No se pudo actualizar la asistencia del colegiado.',
+          : 'No se pudo actualizar la asistencia del participante.',
       )
     } finally {
       setIsUpdatingAttendance('')
@@ -406,7 +414,7 @@ function EventosOverviewPage() {
             </h2>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
               Haz clic sobre cualquier evento para revisar sus datos y registrar la
-              asistencia de los colegiados desde la misma vista.
+              asistencia de colegiados y otros participantes desde la misma vista.
             </p>
           </div>
 
@@ -558,30 +566,31 @@ function EventosOverviewPage() {
                       type="search"
                       value={memberSearch}
                       onChange={(event) => setMemberSearch(event.target.value)}
-                      placeholder="Buscar colegiado por codigo o nombre"
+                      placeholder="Buscar participante por codigo, nombre o DNI"
                       className="w-full bg-transparent text-sm font-medium text-slate-700 outline-none placeholder:text-slate-400"
                     />
                   </label>
                 </div>
 
                 <div className="mt-4 overflow-hidden rounded-[26px] border border-slate-200">
-                  <div className="hidden grid-cols-[92px_1.3fr_1fr_0.9fr_90px] bg-[#e9f0ff] px-6 py-4 text-[11px] font-bold uppercase tracking-[0.22em] text-slate-500 lg:grid">
+                  <div className="hidden grid-cols-[92px_140px_140px_1.35fr_0.95fr] bg-[#e9f0ff] px-6 py-4 text-[11px] font-bold uppercase tracking-[0.22em] text-slate-500 lg:grid">
                     <span>Check</span>
-                    <span>Colegiado</span>
-                    <span>Especialidad</span>
-                    <span>Estado</span>
-                    <span>Asistencia</span>
+                    <span>Codigo</span>
+                    <span>DNI</span>
+                    <span>Participante</span>
+                    <span>Tipo</span>
                   </div>
 
                   <div className="divide-y divide-slate-200 bg-white">
-                    {filteredMembers.map((member, index) => {
+                    {paginatedMembers.map((member, index) => {
                       const isChecked = member.asistio
-                      const isUpdating = isUpdatingAttendance === String(member.colegiadoId)
+                      const isUpdating =
+                        isUpdatingAttendance === `${member.tipoRegistro}-${member.personaId}`
 
                       return (
                         <label
-                          key={member.colegiadoId}
-                          className={`grid cursor-pointer gap-4 px-5 py-5 lg:grid-cols-[92px_1.3fr_1fr_0.9fr_90px] lg:items-center lg:px-6 ${
+                          key={`${member.tipoRegistro}-${member.personaId}`}
+                          className={`grid cursor-pointer gap-4 px-5 py-5 lg:grid-cols-[92px_140px_140px_1.35fr_0.95fr] lg:items-center lg:px-6 ${
                             index % 2 === 1 ? 'bg-[#f8fbff]' : 'bg-white'
                           }`}
                         >
@@ -590,56 +599,44 @@ function EventosOverviewPage() {
                               type="checkbox"
                               checked={isChecked}
                               disabled={isUpdating}
-                              onChange={() =>
-                                handleToggleMember(member.colegiadoId, member.asistio)
-                              }
+                              onChange={() => handleToggleMember(member, member.asistio)}
                               className="h-5 w-5 rounded border-slate-300 accent-[#1739a6] disabled:cursor-not-allowed disabled:opacity-60"
                             />
                           </div>
 
                           <div>
                             <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-400 lg:hidden">
-                              Colegiado
+                              Codigo
                             </p>
-                            <p className="font-semibold text-slate-950">
-                              {member.nombreCompleto}
-                            </p>
-                            <p className="mt-1 text-sm text-slate-500">
-                              {member.codigoColegiatura}
-                            </p>
+                            <p className="font-semibold text-slate-950">{member.codigo}</p>
                           </div>
 
                           <div>
                             <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-400 lg:hidden">
-                              Especialidad
+                              DNI
                             </p>
-                            <p className="text-sm font-medium text-slate-700">
-                              {member.especialidadPrincipal}
-                            </p>
+                            <p className="text-sm text-slate-600">{member.documento}</p>
                           </div>
 
                           <div>
                             <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-400 lg:hidden">
-                              Estado
+                              Participante
+                            </p>
+                            <p className="font-semibold text-slate-950">{member.nombreCompleto}</p>
+                          </div>
+
+                          <div>
+                            <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-400 lg:hidden">
+                              Tipo
                             </p>
                             <span
                               className={`inline-flex rounded-full px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] ${
-                                statusStyles[member.estado] ?? 'bg-slate-100 text-slate-600'
-                              }`}
-                            >
-                              {formatStatusLabel(member.estado)}
-                            </span>
-                          </div>
-
-                          <div className="flex justify-start lg:justify-center">
-                            <span
-                              className={`inline-flex rounded-full px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] ${
-                                isChecked
+                                member.tipoRegistro === 'COLEGIADO'
                                   ? 'bg-cobalt-soft text-cobalt'
-                                  : 'bg-slate-100 text-slate-500'
+                                  : 'bg-violet-100 text-violet-700'
                               }`}
                             >
-                              {isUpdating ? 'Guardando' : isChecked ? 'Asistio' : 'Pendiente'}
+                              {member.tipoRegistro === 'COLEGIADO' ? 'Colegiado' : 'Otro'}
                             </span>
                           </div>
                         </label>
@@ -648,11 +645,47 @@ function EventosOverviewPage() {
 
                     {filteredMembers.length === 0 ? (
                       <div className="px-5 py-10 text-center text-sm text-slate-500">
-                        No encontramos colegiados con ese criterio de busqueda.
+                        No encontramos participantes con ese criterio de busqueda.
                       </div>
                     ) : null}
                   </div>
                 </div>
+
+                {filteredMembers.length > 0 ? (
+                  <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
+                    <p className="text-sm text-slate-500">
+                      Mostrando {filteredMembers.length === 0 ? 0 : (safeParticipantsPage - 1) * participantsPageSize + 1}{' '}
+                      a {Math.min(safeParticipantsPage * participantsPageSize, filteredMembers.length)}{' '}
+                      de {filteredMembers.length} participantes
+                    </p>
+
+                    <div className="flex flex-wrap items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setParticipantsPage((current) => Math.max(1, current - 1))}
+                        disabled={safeParticipantsPage === 1}
+                        className="inline-flex rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-45"
+                      >
+                        Anterior
+                      </button>
+                      <div className="rounded-2xl bg-[#eef4ff] px-4 py-3 text-sm font-semibold text-slate-700">
+                        {safeParticipantsPage} / {totalParticipantsPages}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setParticipantsPage((current) =>
+                            Math.min(totalParticipantsPages, current + 1),
+                          )
+                        }
+                        disabled={safeParticipantsPage === totalParticipantsPages}
+                        className="inline-flex rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-45"
+                      >
+                        Siguiente
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
               </>
             ) : (
               <div className="flex min-h-[320px] items-center justify-center rounded-[24px] border border-dashed border-slate-300 bg-[#f8fbff] p-6 text-center">

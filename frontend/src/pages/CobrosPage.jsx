@@ -19,7 +19,7 @@ function CobrosPage() {
                 Caja y Cobros
               </h1>
               <p className="mt-3 text-sm leading-7 text-slate-600 sm:text-base">
-                Modulo principal de tesoreria para monitorear caja, registrar operaciones,
+                Modulo principal de tesoreria para monitorear caja, registrar operaciones, crear fraccionamientos,
                 revisar historial y controlar comprobantes.
               </p>
             </div>

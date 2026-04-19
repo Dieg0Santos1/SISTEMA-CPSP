@@ -7,4 +7,6 @@ import pe.cpsp.sistema.eventos.domain.model.EventoAsistencia;
 public interface EventoAsistenciaRepository extends JpaRepository<EventoAsistencia, Long> {
 
   Optional<EventoAsistencia> findByEventoIdAndColegiadoId(Long eventoId, Long colegiadoId);
+
+  Optional<EventoAsistencia> findByEventoIdAndPersonaExternaId(Long eventoId, Long personaExternaId);
 }

@@ -14,6 +14,7 @@ import pe.cpsp.sistema.colegiados.api.dto.ColegiadoEspecialidadesRequest;
 import pe.cpsp.sistema.colegiados.api.dto.ColegiadoUpsertRequest;
 import pe.cpsp.sistema.colegiados.domain.model.Colegiado;
 import pe.cpsp.sistema.colegiados.infrastructure.persistence.repository.ColegiadoRepository;
+import pe.cpsp.sistema.colegiados.infrastructure.persistence.repository.PersonaExternaRepository;
 import pe.cpsp.sistema.common.exception.DuplicateResourceException;
 import pe.cpsp.sistema.common.exception.InvalidRequestException;
 import pe.cpsp.sistema.common.exception.ResourceNotFoundException;
@@ -29,16 +30,19 @@ public class ColegiadoService {
   private static final String ESTADO_NO_HABILITADO = "NO_HABILITADO";
 
   private final ColegiadoRepository colegiadoRepository;
+  private final PersonaExternaRepository personaExternaRepository;
   private final CobroRepository cobroRepository;
   private final CobroDetalleRepository cobroDetalleRepository;
   private final Clock appClock;
 
   public ColegiadoService(
       ColegiadoRepository colegiadoRepository,
+      PersonaExternaRepository personaExternaRepository,
       CobroRepository cobroRepository,
       CobroDetalleRepository cobroDetalleRepository,
       Clock appClock) {
     this.colegiadoRepository = colegiadoRepository;
+    this.personaExternaRepository = personaExternaRepository;
     this.cobroRepository = cobroRepository;
     this.cobroDetalleRepository = cobroDetalleRepository;
     this.appClock = appClock;
@@ -164,8 +168,18 @@ public class ColegiadoService {
   }
 
   private void validateDuplicateDni(String dni, Long currentId) {
+    String normalizedDni = normalizeDigits(dni);
+
+    personaExternaRepository
+        .findByDni(normalizedDni)
+        .ifPresent(
+            existing -> {
+              throw new DuplicateResourceException(
+                  "Ya existe un externo registrado con el DNI indicado.");
+            });
+
     colegiadoRepository
-        .findByDni(clean(dni))
+        .findByDni(normalizedDni)
         .filter(existing -> !Objects.equals(existing.getId(), currentId))
         .ifPresent(
             existing -> {

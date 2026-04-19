@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import pe.cpsp.sistema.eventos.api.dto.EventoCreateRequest;
@@ -43,15 +44,19 @@ public class EventoController {
     return eventoService.getDetail(id);
   }
 
-  @PutMapping("/{eventoId}/asistencias/{colegiadoId}")
+  @PutMapping("/{eventoId}/asistencias/{personaId}")
   public EventoDetailResponse registrarAsistencia(
-      @PathVariable Long eventoId, @PathVariable Long colegiadoId) {
-    return eventoService.registrarAsistencia(eventoId, colegiadoId);
+      @PathVariable Long eventoId,
+      @PathVariable Long personaId,
+      @RequestParam(name = "tipo", defaultValue = "COLEGIADO") String tipoRegistro) {
+    return eventoService.registrarAsistencia(eventoId, personaId, tipoRegistro);
   }
 
-  @DeleteMapping("/{eventoId}/asistencias/{colegiadoId}")
+  @DeleteMapping("/{eventoId}/asistencias/{personaId}")
   public EventoDetailResponse quitarAsistencia(
-      @PathVariable Long eventoId, @PathVariable Long colegiadoId) {
-    return eventoService.quitarAsistencia(eventoId, colegiadoId);
+      @PathVariable Long eventoId,
+      @PathVariable Long personaId,
+      @RequestParam(name = "tipo", defaultValue = "COLEGIADO") String tipoRegistro) {
+    return eventoService.quitarAsistencia(eventoId, personaId, tipoRegistro);
   }
 }

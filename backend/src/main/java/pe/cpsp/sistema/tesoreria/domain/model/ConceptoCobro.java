@@ -28,6 +28,10 @@ public class ConceptoCobro extends AuditableEntity {
   @Column(nullable = false, unique = true, length = 30)
   private String codigo;
 
+  @Enumerated(EnumType.STRING)
+  @Column(name = "tipo_concepto", nullable = false, length = 20)
+  private TipoConceptoCobro tipoConcepto = TipoConceptoCobro.NORMAL;
+
   @Column(nullable = false, length = 120)
   private String nombre;
 
@@ -40,6 +44,17 @@ public class ConceptoCobro extends AuditableEntity {
 
   @Column(name = "monto_base", nullable = false, precision = 10, scale = 2)
   private BigDecimal montoBase;
+
+  @Enumerated(EnumType.STRING)
+  @Column(name = "tipo_descuento", length = 20)
+  private TipoDescuento tipoDescuento;
+
+  @Column(name = "valor_descuento", precision = 10, scale = 2)
+  private BigDecimal valorDescuento;
+
+  @Enumerated(EnumType.STRING)
+  @Column(name = "aplica_descuento_a", length = 40)
+  private AplicaDescuentoA aplicaDescuentoA;
 
   @Column(name = "usa_periodo", nullable = false)
   private boolean usaPeriodo;

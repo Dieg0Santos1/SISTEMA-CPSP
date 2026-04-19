@@ -8,9 +8,11 @@ import EventosPage from '../pages/EventosPage'
 import InventarioPage from '../pages/InventarioPage'
 import TribunalPage from '../pages/TribunalPage'
 import CobrosComprobantesPage from '../pages/cobros/CobrosComprobantesPage'
+import CobrosFraccionamientosPage from '../pages/cobros/CobrosFraccionamientosPage'
 import CobrosHistorialPage from '../pages/cobros/CobrosHistorialPage'
 import CobrosRegistrarPage from '../pages/cobros/CobrosRegistrarPage'
 import CobrosResumenPage from '../pages/cobros/CobrosResumenPage'
+import CobrosVentaProductosPage from '../pages/cobros/CobrosVentaProductosPage'
 import EleccionesPage from '../pages/eventos/EleccionesPage'
 
 function AdminShell() {
@@ -31,6 +33,8 @@ function AppRouter() {
           <Route index element={<Navigate to="resumen" replace />} />
           <Route path="resumen" element={<CobrosResumenPage />} />
           <Route path="registrar" element={<CobrosRegistrarPage />} />
+          <Route path="ventas-productos" element={<CobrosVentaProductosPage />} />
+          <Route path="fraccionamientos" element={<CobrosFraccionamientosPage />} />
           <Route path="historial" element={<CobrosHistorialPage />} />
           <Route path="comprobantes" element={<CobrosComprobantesPage />} />
         </Route>

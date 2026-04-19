@@ -1072,14 +1072,14 @@ function InventarioPage() {
                 </div>
               ) : (
                 <>
-                  <div className="mt-6 grid gap-4 xl:grid-cols-2">
+                  <div className="mt-6 grid items-stretch gap-4 xl:grid-cols-2">
                     {paginatedProducts.map((product) => {
                       const presentation = getProductPresentation(product)
 
                       return (
                         <article
                           key={product.id}
-                          className={`rounded-[28px] border bg-[linear-gradient(180deg,#ffffff_0%,#f8fbff_100%)] p-5 shadow-[0_16px_34px_-30px_rgba(15,23,42,0.55)] ${presentation.tone}`}
+                          className={`flex h-full flex-col rounded-[26px] border bg-[linear-gradient(180deg,#ffffff_0%,#f8fbff_100%)] p-4 shadow-[0_16px_34px_-30px_rgba(15,23,42,0.55)] ${presentation.tone}`}
                         >
                           <div className="flex items-start justify-between gap-4">
                             <div>
@@ -1088,65 +1088,67 @@ function InventarioPage() {
                               >
                                 {product.categoria}
                               </span>
-                              <h3 className="mt-3 text-2xl font-semibold tracking-tight text-slate-950">
+                              <h3 className="mt-3 text-[1.65rem] font-semibold leading-tight tracking-tight text-slate-950">
                                 {product.nombre}
                               </h3>
                             </div>
 
-                            <div className="rounded-2xl bg-[#edf6ff] p-3 text-cobalt">
-                              <BookOpen size={20} strokeWidth={2.2} />
+                            <div className="rounded-2xl bg-[#edf6ff] p-2.5 text-cobalt">
+                              <BookOpen size={18} strokeWidth={2.2} />
                             </div>
                           </div>
 
-                          <p className="mt-3 text-sm leading-7 text-slate-600">
+                          <p className="mt-3 min-h-[52px] text-sm leading-6 text-slate-600">
                             {product.descripcion}
                           </p>
 
-                          <div className="mt-5 grid gap-3 sm:grid-cols-[repeat(3,minmax(0,1fr))]">
-                            <div className="min-w-0 rounded-[22px] border border-slate-200 bg-white p-4">
+                          <div className="mt-auto pt-2.5">
+                            <div className="grid gap-2.5 sm:grid-cols-[repeat(3,minmax(0,1fr))]">
+                              <div className="min-w-0 rounded-[20px] border border-slate-200 bg-white px-3 py-3">
                               <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">
                                 Stock
                               </p>
-                              <p className="mt-2 text-2xl font-bold text-slate-950">
+                              <p className="mt-1.5 text-[1.55rem] font-bold leading-none text-slate-950">
                                 {product.stockActual}
                               </p>
-                            </div>
-                            <div className="min-w-0 rounded-[22px] border border-slate-200 bg-white p-4">
+                              </div>
+                              <div className="min-w-0 rounded-[20px] border border-slate-200 bg-white px-3 py-3">
                               <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">
                                 Ventas
                               </p>
-                              <p className="mt-2 text-2xl font-bold text-slate-950">
+                              <p className="mt-1.5 text-[1.55rem] font-bold leading-none text-slate-950">
                                 {product.ventasRegistradas}
                               </p>
-                            </div>
-                            <div className="min-w-0 rounded-[22px] border border-slate-200 bg-white p-4">
+                              </div>
+                              <div className="min-w-0 rounded-[20px] border border-slate-200 bg-white px-3 py-3">
                               <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">
                                 Precio
                               </p>
-                              <p className="mt-2 text-base font-bold tracking-tight text-slate-950 sm:text-[1.05rem]">
+                              <p className="mt-1.5 text-[1rem] font-bold tracking-tight text-slate-950">
                                 {formatCurrency(product.precioReferencia)}
                               </p>
+                              </div>
                             </div>
-                          </div>
 
-                          <div className="mt-5 flex flex-col gap-3 sm:flex-row">
-                            <button
-                              type="button"
-                              onClick={() => openProductModal('report', product.id)}
-                              className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:text-slate-950"
-                            >
-                              <FileBarChart2 size={17} strokeWidth={2.2} />
-                              Reportes
-                            </button>
+                            <div className="mt-3 flex flex-col gap-2.5 sm:flex-row">
+                              <button
+                                type="button"
+                                onClick={() => openProductModal('report', product.id)}
+                                className="inline-flex min-h-[46px] flex-1 items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:text-slate-950"
+                              >
+                                <FileBarChart2 size={16} strokeWidth={2.2} />
+                                Reportes
+                              </button>
 
-                            <button
-                              type="button"
-                              onClick={() => openProductModal('delivery', product.id)}
-                              className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl bg-[linear-gradient(135deg,#1739a6_0%,#204edc_100%)] px-4 py-3 text-sm font-semibold text-white shadow-[0_18px_34px_-24px_rgba(30,64,175,0.95)] transition hover:-translate-y-0.5"
-                            >
-                              <CheckCheck size={17} strokeWidth={2.2} />
-                              Producto entregado
-                            </button>
+                              <button
+                                type="button"
+                                onClick={() => openProductModal('delivery', product.id)}
+                                className="inline-flex min-h-[46px] flex-1 items-center justify-center gap-2 rounded-2xl bg-[linear-gradient(135deg,#1739a6_0%,#204edc_100%)] px-4 py-2.5 text-sm font-semibold text-white shadow-[0_18px_34px_-24px_rgba(30,64,175,0.95)] transition hover:-translate-y-0.5"
+                              >
+                                <CheckCheck size={16} strokeWidth={2.2} />
+                                Entregar
+                              </button>
+                            </div>
                           </div>
                         </article>
                       )
@@ -1205,7 +1207,7 @@ function InventarioPage() {
             </div>
           ) : movements.length > 0 ? (
             <div className="mt-5 space-y-3">
-              {movements.slice(0, 7).map((item) => (
+              {movements.slice(0, 6).map((item) => (
                 <article
                   key={item.id}
                   className="rounded-[22px] border border-slate-200 bg-[#f8fbff] p-3.5"

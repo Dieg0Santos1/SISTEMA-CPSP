@@ -1,9 +1,11 @@
-import { createElement, useState } from 'react'
+import { createElement, useEffect, useState } from 'react'
 import {
   Bell,
   CircleHelp,
   LogOut,
   Menu,
+  PanelLeftClose,
+  PanelLeftOpen,
   ShieldCheck,
   X,
 } from 'lucide-react'
@@ -19,19 +21,32 @@ const headerActions = [
   { label: 'Ayuda', icon: CircleHelp },
 ]
 
-function SidebarContent({ onNavigate }) {
+const sidebarPreferenceKey = 'cpsp-admin-sidebar-collapsed'
+
+function SidebarContent({
+  onNavigate,
+  collapsed = false,
+}) {
   return (
     <>
-      <div className="flex items-center gap-3 rounded-3xl bg-white/92 px-4 py-3 shadow-[0_16px_30px_-24px_rgba(15,23,42,0.45)] ring-1 ring-white/70 backdrop-blur-sm">
-        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[linear-gradient(135deg,#0f1f57_0%,#1739a6_52%,#2f61ff_100%)] text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.12)]">
-          <ShieldCheck size={22} strokeWidth={2.2} />
-        </div>
+      <div className={`flex ${collapsed ? 'justify-center' : 'items-center gap-3'}`}>
+        <div
+          className={`flex rounded-3xl bg-white/92 shadow-[0_16px_30px_-24px_rgba(15,23,42,0.45)] ring-1 ring-white/70 backdrop-blur-sm ${
+            collapsed ? 'h-20 w-20 items-center justify-center p-0' : 'items-center gap-3 px-4 py-3'
+          }`}
+        >
+          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[linear-gradient(135deg,#0f1f57_0%,#1739a6_52%,#2f61ff_100%)] text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.12)]">
+            <ShieldCheck size={22} strokeWidth={2.2} />
+          </div>
 
-        <div>
-          <p className="text-xl font-bold tracking-tight text-cobalt">C.P.L. Admin</p>
-          <p className="text-xs font-medium uppercase tracking-[0.22em] text-slate-500">
-            Clinical Archive
-          </p>
+          {!collapsed ? (
+            <div>
+              <p className="text-xl font-bold tracking-tight text-cobalt">C.P.L. Admin</p>
+              <p className="text-xs font-medium uppercase tracking-[0.22em] text-slate-500">
+                Clinical Archive
+              </p>
+            </div>
+          ) : null}
         </div>
       </div>
 
@@ -49,8 +64,11 @@ function SidebarContent({ onNavigate }) {
                 to={item.path}
                 end={item.end}
                 onClick={onNavigate}
+                title={collapsed ? item.label : undefined}
                 className={({ isActive }) =>
-                  `flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-[15px] font-medium transition ${
+                  `flex w-full items-center rounded-2xl py-3 text-left text-[15px] font-medium transition ${
+                    collapsed ? 'justify-center px-2' : 'gap-3 px-4'
+                  } ${
                     isActive
                       ? 'bg-white/90 text-cobalt shadow-[0_18px_32px_-24px_rgba(15,23,42,0.55)] ring-1 ring-white/80'
                       : 'text-slate-700 hover:bg-white/72 hover:text-slate-950'
@@ -58,7 +76,7 @@ function SidebarContent({ onNavigate }) {
                 }
               >
                 {iconElement}
-                <span>{item.label}</span>
+                {!collapsed ? <span>{item.label}</span> : null}
               </NavLink>
             )
           }
@@ -67,10 +85,13 @@ function SidebarContent({ onNavigate }) {
             <button
               key={item.label}
               type="button"
-              className="flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-[15px] font-medium text-slate-700 transition hover:bg-white/72 hover:text-slate-950"
+              title={collapsed ? item.label : undefined}
+              className={`flex w-full items-center rounded-2xl py-3 text-left text-[15px] font-medium text-slate-700 transition hover:bg-white/72 hover:text-slate-950 ${
+                collapsed ? 'justify-center px-2' : 'gap-3 px-4'
+              }`}
             >
               {iconElement}
-              <span>{item.label}</span>
+              {!collapsed ? <span>{item.label}</span> : null}
             </button>
           )
         })}
@@ -86,14 +107,17 @@ function SidebarContent({ onNavigate }) {
             <button
               key={item.label}
               type="button"
-              className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-[15px] font-medium transition ${
+              title={collapsed ? item.label : undefined}
+              className={`flex w-full items-center rounded-2xl py-3 text-left text-[15px] font-medium transition ${
+                collapsed ? 'justify-center px-2' : 'gap-3 px-4'
+              } ${
                 item.tone === 'danger'
                   ? 'text-red-700 hover:bg-white/70 hover:text-red-800'
                   : 'text-slate-700 hover:bg-white/72 hover:text-slate-950'
               }`}
             >
               {footerIcon}
-              <span>{item.label}</span>
+              {!collapsed ? <span>{item.label}</span> : null}
             </button>
           )
         })}
@@ -104,8 +128,23 @@ function SidebarContent({ onNavigate }) {
 
 function AdminLayout({ children }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
+    if (typeof window === 'undefined') {
+      return false
+    }
+
+    return window.localStorage.getItem(sidebarPreferenceKey) === 'true'
+  })
   const { user } = useSession()
   const displayName = user.fullName.split(' ')[0] ?? user.fullName
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return
+    }
+
+    window.localStorage.setItem(sidebarPreferenceKey, String(isSidebarCollapsed))
+  }, [isSidebarCollapsed])
 
   return (
     <div className="h-screen overflow-hidden bg-[linear-gradient(180deg,#dce6ff_0%,#edf3ff_14%,#f6f8fe_100%)] p-3 text-slate-900 sm:p-4">
@@ -136,8 +175,12 @@ function AdminLayout({ children }) {
       ) : null}
 
       <div className="mx-auto flex h-full max-w-[1480px] overflow-hidden rounded-[34px] border border-white/[0.82] bg-[#f6f8fe] shadow-[0_24px_80px_-44px_rgba(30,64,175,0.42)]">
-        <aside className="hidden h-full w-[270px] shrink-0 overflow-y-auto border-r border-[#aec5ff]/70 bg-[linear-gradient(180deg,#d7e5ff_0%,#c8dcff_30%,#b8d0ff_68%,#d6e4ff_100%)] px-5 py-6 shadow-[inset_-1px_0_0_rgba(133,164,255,0.2)] lg:flex lg:flex-col">
-          <SidebarContent />
+        <aside
+          className={`hidden h-full shrink-0 overflow-y-auto border-r border-[#aec5ff]/70 bg-[linear-gradient(180deg,#d7e5ff_0%,#c8dcff_30%,#b8d0ff_68%,#d6e4ff_100%)] py-6 shadow-[inset_-1px_0_0_rgba(133,164,255,0.2)] transition-[width,padding] duration-300 lg:flex lg:flex-col ${
+            isSidebarCollapsed ? 'w-[96px] px-3' : 'w-[270px] px-5'
+          }`}
+        >
+          <SidebarContent collapsed={isSidebarCollapsed} />
         </aside>
 
         <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-[linear-gradient(180deg,#f6faff_0%,#fdfdff_100%)]">
@@ -151,6 +194,20 @@ function AdminLayout({ children }) {
                   onClick={() => setIsSidebarOpen(true)}
                 >
                   <Menu size={18} />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setIsSidebarCollapsed((current) => !current)}
+                  aria-label={isSidebarCollapsed ? 'Expandir menu lateral' : 'Contraer menu lateral'}
+                  className="mt-1 hidden h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-[#d7e5ff] bg-white/92 text-cobalt shadow-[0_14px_28px_-24px_rgba(23,57,166,0.55)] transition hover:-translate-y-0.5 hover:border-white lg:inline-flex"
+                  title={isSidebarCollapsed ? 'Expandir menu lateral' : 'Contraer menu lateral'}
+                >
+                  {isSidebarCollapsed ? (
+                    <PanelLeftOpen size={18} strokeWidth={2.1} />
+                  ) : (
+                    <PanelLeftClose size={18} strokeWidth={2.1} />
+                  )}
                 </button>
 
                 <div className="w-full max-w-4xl py-1">

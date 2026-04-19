@@ -26,6 +26,9 @@ import pe.cpsp.sistema.tesoreria.api.dto.ConceptoCobroCatalogoResponse;
 import pe.cpsp.sistema.tesoreria.api.dto.ConceptoCobroResponse;
 import pe.cpsp.sistema.tesoreria.api.dto.FraccionamientoCuotaResponse;
 import pe.cpsp.sistema.tesoreria.api.dto.FraccionamientoDetailResponse;
+import pe.cpsp.sistema.tesoreria.api.dto.FraccionamientoListadoItemResponse;
+import pe.cpsp.sistema.tesoreria.api.dto.FraccionamientoPanelDetailResponse;
+import pe.cpsp.sistema.tesoreria.api.dto.FraccionamientosPageResponse;
 import pe.cpsp.sistema.tesoreria.api.dto.HistorialPageResponse;
 import pe.cpsp.sistema.tesoreria.api.dto.OperacionTesoreriaResponse;
 import pe.cpsp.sistema.tesoreria.api.dto.PagedResponse;
@@ -37,10 +40,12 @@ import pe.cpsp.sistema.tesoreria.domain.model.Cobro;
 import pe.cpsp.sistema.tesoreria.domain.model.ComprobanteSerie;
 import pe.cpsp.sistema.tesoreria.domain.model.ConceptoCobro;
 import pe.cpsp.sistema.tesoreria.domain.model.EstadoConceptoCobro;
+import pe.cpsp.sistema.tesoreria.domain.model.EstadoFraccionamiento;
 import pe.cpsp.sistema.tesoreria.domain.model.EstadoFraccionamientoCuota;
 import pe.cpsp.sistema.tesoreria.domain.model.Fraccionamiento;
 import pe.cpsp.sistema.tesoreria.domain.model.FraccionamientoCuota;
 import pe.cpsp.sistema.tesoreria.domain.model.MetodoPago;
+import pe.cpsp.sistema.tesoreria.domain.model.TipoConceptoCobro;
 import pe.cpsp.sistema.tesoreria.infrastructure.persistence.repository.CobroRepository;
 import pe.cpsp.sistema.tesoreria.infrastructure.persistence.repository.ComprobanteSerieRepository;
 import pe.cpsp.sistema.tesoreria.infrastructure.persistence.repository.ConceptoCobroRepository;
@@ -216,7 +221,9 @@ public class TesoreriaQueryService {
         conceptoCobroRepository.countByEstado(EstadoConceptoCobro.ACTIVO),
         categorias,
         conceptoCobroRepository.countByEstadoAndAfectaHabilitacion(EstadoConceptoCobro.ACTIVO, true),
-        conceptoCobroRepository.countByEstadoAndExoneradoIgv(EstadoConceptoCobro.ACTIVO, true));
+        conceptos.stream()
+            .filter(concepto -> "DESCUENTO".equals(concepto.tipoConcepto()))
+            .count());
   }
 
   public List<ComprobanteSerieResponse> listSeriesActivas() {
@@ -334,6 +341,78 @@ public class TesoreriaQueryService {
         cobros.stream().filter(cobro -> !cobro.isImpreso()).count(),
         listSeriesActivas(),
         paginate(rows, page, size));
+  }
+
+  public FraccionamientosPageResponse getFraccionamientos(String search, int page, int size) {
+    List<Fraccionamiento> fraccionamientos = fraccionamientoRepository.findAllWithRelations();
+    String normalizedSearch = normalize(search);
+
+    List<FraccionamientoListadoItemResponse> rows =
+        fraccionamientos.stream()
+            .filter(
+                fraccionamiento ->
+                    normalizedSearch.isBlank()
+                        || List.of(
+                                fraccionamiento.getColegiado().getCodigoColegiatura(),
+                                buildNombreCompleto(fraccionamiento.getColegiado()))
+                            .stream()
+                            .filter(Objects::nonNull)
+                            .map(String::toLowerCase)
+                            .anyMatch(value -> value.contains(normalizedSearch)))
+            .sorted(
+                Comparator.comparing(
+                        (Fraccionamiento fraccionamiento) ->
+                            fraccionamiento.getEstado() != EstadoFraccionamiento.ACTIVO)
+                    .thenComparing(
+                        fraccionamiento -> {
+                          FraccionamientoCuota siguienteCuota =
+                              tesoreriaSupport.findNextPendingCuota(fraccionamiento);
+                          return siguienteCuota != null
+                              ? siguienteCuota.getFechaVencimiento()
+                              : LocalDate.MAX;
+                        })
+                    .thenComparing(Comparator.comparing(Fraccionamiento::getId).reversed()))
+            .map(this::toFraccionamientoListadoResponse)
+            .toList();
+
+    BigDecimal montoTotalRefinanciado =
+        fraccionamientos.stream()
+            .map(Fraccionamiento::getMontoTotal)
+            .filter(Objects::nonNull)
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+    BigDecimal saldoPendienteTotal =
+        fraccionamientos.stream()
+            .map(this::calculateSaldoPendiente)
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+    long conveniosActivos =
+        fraccionamientos.stream()
+            .filter(
+                fraccionamiento -> fraccionamiento.getEstado() == EstadoFraccionamiento.ACTIVO)
+            .count();
+
+    return new FraccionamientosPageResponse(
+        fraccionamientos.size(),
+        conveniosActivos,
+        montoTotalRefinanciado,
+        saldoPendienteTotal,
+        paginate(rows, page, size));
+  }
+
+  public FraccionamientoPanelDetailResponse getFraccionamientoDetail(Long fraccionamientoId) {
+    Fraccionamiento fraccionamiento =
+        fraccionamientoRepository
+            .findByIdWithRelations(fraccionamientoId)
+            .orElseThrow(
+                () -> new ResourceNotFoundException("No existe el fraccionamiento solicitado."));
+
+    return new FraccionamientoPanelDetailResponse(
+        fraccionamiento.getId(),
+        fraccionamiento.getColegiado().getId(),
+        fraccionamiento.getColegiado().getCodigoColegiatura(),
+        buildNombreCompleto(fraccionamiento.getColegiado()),
+        toFraccionamientoResponse(fraccionamiento));
   }
 
   private List<Cobro> loadCobrosSorted() {
@@ -495,10 +574,14 @@ public class TesoreriaQueryService {
     return new ConceptoCobroResponse(
         concepto.getId(),
         concepto.getCodigo(),
+        concepto.getTipoConcepto().name(),
         concepto.getNombre(),
         concepto.getCategoria().name(),
         concepto.getDescripcion(),
         concepto.getMontoBase(),
+        concepto.getTipoDescuento() != null ? concepto.getTipoDescuento().name() : null,
+        concepto.getValorDescuento(),
+        concepto.getAplicaDescuentoA() != null ? concepto.getAplicaDescuentoA().name() : null,
         concepto.isUsaPeriodo(),
         concepto.isPermiteCantidad(),
         concepto.isAdmiteDescuento(),
@@ -516,6 +599,23 @@ public class TesoreriaQueryService {
         serie.getSerie(),
         serie.getCorrelativoActual(),
         serie.isActiva());
+  }
+
+  private FraccionamientoListadoItemResponse toFraccionamientoListadoResponse(
+      Fraccionamiento fraccionamiento) {
+    FraccionamientoCuota siguienteCuota = tesoreriaSupport.findNextPendingCuota(fraccionamiento);
+
+    return new FraccionamientoListadoItemResponse(
+        fraccionamiento.getId(),
+        fraccionamiento.getColegiado().getId(),
+        fraccionamiento.getColegiado().getCodigoColegiatura(),
+        buildNombreCompleto(fraccionamiento.getColegiado()),
+        siguienteCuota != null
+            ? buildFractionationReference(siguienteCuota, fraccionamiento.getNumeroCuotas())
+            : "Convenio cerrado",
+        siguienteCuota != null ? siguienteCuota.getFechaVencimiento() : null,
+        fraccionamiento.getEstado().name(),
+        siguienteCuota != null);
   }
 
   private <T> PagedResponse<T> paginate(List<T> rows, int page, int size) {
@@ -551,6 +651,22 @@ public class TesoreriaQueryService {
         .filter(value -> !value.isBlank())
         .reduce((left, right) -> left + " " + right)
         .orElse("");
+  }
+
+  private String buildFractionationReference(
+      FraccionamientoCuota cuota, Integer totalInstallments) {
+    if (cuota == null || totalInstallments == null) {
+      return "";
+    }
+
+    return "Cuota " + cuota.getNumeroCuota() + "/" + totalInstallments;
+  }
+
+  private BigDecimal calculateSaldoPendiente(Fraccionamiento fraccionamiento) {
+    return fraccionamiento.getCuotas().stream()
+        .filter(cuota -> cuota.getEstado() == EstadoFraccionamientoCuota.PENDIENTE)
+        .map(FraccionamientoCuota::getMonto)
+        .reduce(BigDecimal.ZERO, BigDecimal::add);
   }
 
   private String normalize(String value) {

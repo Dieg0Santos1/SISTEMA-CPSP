@@ -66,6 +66,14 @@ export async function createTesoreriaFraccionamiento(colegiadoId, payload) {
   })
 }
 
+export async function getTesoreriaFraccionamientos({ search = '', page = 1, size = 5 } = {}) {
+  return requestJson(`/tesoreria/fraccionamientos${buildQuery({ search, page, size })}`)
+}
+
+export async function getTesoreriaFraccionamientoDetail(fraccionamientoId) {
+  return requestJson(`/tesoreria/fraccionamientos/${fraccionamientoId}`)
+}
+
 export async function getTesoreriaConceptosCobro() {
   return requestJson('/tesoreria/conceptos-cobro')
 }

@@ -1,9 +1,11 @@
 package pe.cpsp.sistema.eventos.api.dto;
 
 public record EventoAttendanceMemberResponse(
-    Long colegiadoId,
-    String codigoColegiatura,
+    Long personaId,
+    String tipoRegistro,
+    String codigo,
+    String documento,
     String nombreCompleto,
-    String especialidadPrincipal,
+    String detalle,
     String estado,
     boolean asistio) {}

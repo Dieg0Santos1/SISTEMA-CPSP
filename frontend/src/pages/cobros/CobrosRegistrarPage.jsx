@@ -6,7 +6,7 @@ import {
   LoaderCircle,
   Printer,
   ReceiptText,
-  Search,
+   Search,
   Trash2,
 } from 'lucide-react'
 import {
@@ -17,6 +17,7 @@ import {
   markTesoreriaCobroPrinted,
   postTesoreriaCobro,
 } from '../../services/tesoreriaApi'
+import FractionationDetailModal from '../../components/cobros/FractionationDetailModal'
 
 const pageSize = 6
 const documentOptions = [
@@ -34,6 +35,8 @@ const periodToneByStatus = {
   GRACE: 'border-amber-200 bg-amber-50 text-amber-700',
   OVERDUE: 'border-rose-200 bg-rose-50 text-rose-700',
   REFINANCED: 'border-fuchsia-200 bg-fuchsia-50 text-fuchsia-700',
+  UPCOMING: 'border-sky-200 bg-sky-50 text-sky-700',
+  NOT_APPLICABLE: 'border-slate-200 bg-slate-100 text-slate-400',
 }
 const stateToneMap = {
   HABILITADO: 'bg-emerald-100 text-emerald-700',
@@ -43,7 +46,6 @@ const fractionationStateToneMap = {
   ACTIVO: 'bg-fuchsia-100 text-fuchsia-700',
   PAGADO: 'bg-emerald-100 text-emerald-700',
 }
-
 function getTodayInLimaISO() {
   const formatter = new Intl.DateTimeFormat('en-CA', {
     timeZone: 'America/Lima',
@@ -82,40 +84,6 @@ function buildConceptAmountLabel(concept) {
   }
 
   return formatCurrency(concept.montoBase)
-}
-
-function buildConceptModeLabel(concept) {
-  if (!concept) {
-    return '-'
-  }
-
-  if (concept.usaPeriodo) {
-    return 'Por periodo'
-  }
-
-  if (concept.permiteCantidad) {
-    return 'Por cantidad'
-  }
-
-  return 'Monto fijo'
-}
-
-function buildConceptChips(concept) {
-  if (!concept) {
-    return []
-  }
-
-  const chips = [concept.categoria]
-
-  if (concept.exoneradoIgv) {
-    chips.push('Exonerado IGV')
-  }
-
-  if (concept.afectaHabilitacion) {
-    chips.push('Impacta habilitacion')
-  }
-
-  return chips
 }
 
 function buildInstallmentAmount(total, installments) {
@@ -227,6 +195,79 @@ function buildGraceWindow(periods) {
   }
 }
 
+function getPeriodSortValue(period) {
+  const parsed = parsePeriodReference(period)
+
+  if (!parsed) {
+    return Number.MAX_SAFE_INTEGER
+  }
+
+  return parsed.year * 100 + parsed.month
+}
+
+function comparePeriods(left, right) {
+  return getPeriodSortValue(left) - getPeriodSortValue(right)
+}
+
+function sortPeriods(periods) {
+  return [...periods].sort(comparePeriods)
+}
+
+function extractPeriodFromDate(dateValue) {
+  if (!dateValue || !/^\d{4}-\d{2}-\d{2}$/.test(dateValue)) {
+    return null
+  }
+
+  return dateValue.slice(0, 7)
+}
+
+function buildPeriodSelectionSummary(selectedPeriods, periodsByCode) {
+  if (!Array.isArray(selectedPeriods) || selectedPeriods.length === 0) {
+    return null
+  }
+
+  const orderedPeriods = sortPeriods(selectedPeriods)
+  const firstPeriod = orderedPeriods[0]
+  const lastPeriod = orderedPeriods[orderedPeriods.length - 1]
+  const firstLabel = periodsByCode.get(firstPeriod)?.label ?? formatMonthYear(firstPeriod)
+  const lastLabel = periodsByCode.get(lastPeriod)?.label ?? formatMonthYear(lastPeriod)
+  const consecutive =
+    orderedPeriods.length === 1 ||
+    orderedPeriods.every((period, index) => {
+      if (index === 0) {
+        return true
+      }
+
+      return getPeriodSortValue(period) - getPeriodSortValue(orderedPeriods[index - 1]) === 1
+    })
+
+  return {
+    title: `${orderedPeriods.length} periodo${orderedPeriods.length === 1 ? '' : 's'} seleccionado${orderedPeriods.length === 1 ? '' : 's'}`,
+    detail:
+      orderedPeriods.length === 1
+        ? firstLabel
+        : consecutive
+          ? `${firstLabel} - ${lastLabel}`
+          : `Seleccion personalizada entre ${firstLabel} y ${lastLabel}`,
+  }
+}
+
+function buildPeriodRangeLabel(periods) {
+  if (!Array.isArray(periods) || periods.length === 0) {
+    return ''
+  }
+
+  const orderedPeriods = [...periods].sort((left, right) =>
+    comparePeriods(left.periodo, right.periodo),
+  )
+  const firstLabel = orderedPeriods[0]?.label ?? formatMonthYear(orderedPeriods[0]?.periodo)
+  const lastLabel =
+    orderedPeriods[orderedPeriods.length - 1]?.label ??
+    formatMonthYear(orderedPeriods[orderedPeriods.length - 1]?.periodo)
+
+  return orderedPeriods.length === 1 ? firstLabel : `${firstLabel} - ${lastLabel}`
+}
+
 function createPrintableHtml(receipt) {
   const itemRows = receipt.items
     .map(
@@ -327,6 +368,17 @@ function FractionationModal({
   )
   const fractionableRanges = buildFractionationRanges(memberDetail.periodosFraccionables)
 
+  if (fractionation) {
+    return (
+      <FractionationDetailModal
+        fractionation={fractionation}
+        memberName={memberDetail.nombreCompleto}
+        memberCode={memberDetail.codigoColegiatura}
+        onClose={onClose}
+      />
+    )
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-sm">
       <div className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-[32px] border border-white/80 bg-white p-6 shadow-[0_30px_80px_-40px_rgba(15,23,42,0.85)] sm:p-7">
@@ -336,7 +388,7 @@ function FractionationModal({
               Fraccionamiento
             </p>
             <h3 className="mt-2 text-3xl font-bold tracking-tight text-slate-950">
-              {fractionation ? 'Detalle del convenio activo' : 'Crear fraccionamiento'}
+              Crear fraccionamiento
             </h3>
             <p className="mt-2 text-sm text-slate-500">
               {memberDetail.nombreCompleto} · {memberDetail.codigoColegiatura}
@@ -572,6 +624,9 @@ function CobrosRegistrarPage() {
   const [conceptsError, setConceptsError] = useState('')
   const [selectedConceptId, setSelectedConceptId] = useState('')
   const [selectedPeriods, setSelectedPeriods] = useState([])
+  const [rangeStartPeriod, setRangeStartPeriod] = useState('')
+  const [rangeEndPeriod, setRangeEndPeriod] = useState('')
+  const [visiblePeriodYear, setVisiblePeriodYear] = useState(null)
   const [quantity, setQuantity] = useState(1)
   const [selectedMemberId, setSelectedMemberId] = useState(null)
   const [selectedMemberDetail, setSelectedMemberDetail] = useState(null)
@@ -736,6 +791,75 @@ function CobrosRegistrarPage() {
     () => concepts.find((item) => String(item.id) === selectedConceptId) ?? null,
     [concepts, selectedConceptId],
   )
+  const periodsMensuales = useMemo(
+    () => selectedMemberDetail?.periodosMensuales ?? [],
+    [selectedMemberDetail?.periodosMensuales],
+  )
+  const periodLookup = useMemo(
+    () => new Map(periodsMensuales.map((period) => [period.periodo, period])),
+    [periodsMensuales],
+  )
+  const periodYears = useMemo(
+    () =>
+      [...new Set(
+        periodsMensuales
+          .map((period) => parsePeriodReference(period.periodo)?.year ?? null)
+          .filter(Boolean),
+      )].sort((left, right) => left - right),
+    [periodsMensuales],
+  )
+  const activePeriodYear = periodYears.includes(visiblePeriodYear)
+    ? visiblePeriodYear
+    : periodYears[0] ?? null
+  const visiblePeriodYearIndex = periodYears.indexOf(activePeriodYear)
+  const visiblePeriods = useMemo(
+    () =>
+      periodsMensuales.filter(
+        (period) => parsePeriodReference(period.periodo)?.year === activePeriodYear,
+      ),
+    [activePeriodYear, periodsMensuales],
+  )
+  const selectablePeriods = useMemo(
+    () =>
+      periodsMensuales
+        .filter((period) => period.selectable)
+        .sort((left, right) => comparePeriods(left.periodo, right.periodo)),
+    [periodsMensuales],
+  )
+  const currentSelectionLimitPeriod = useMemo(() => {
+    if (selectablePeriods.length === 0) {
+      return ''
+    }
+
+    const emissionPeriod = extractPeriodFromDate(emissionDate)
+    const availableUntilEmission = selectablePeriods.filter(
+      (period) => !emissionPeriod || comparePeriods(period.periodo, emissionPeriod) <= 0,
+    )
+
+    return (
+      availableUntilEmission[availableUntilEmission.length - 1]?.periodo ??
+      selectablePeriods[0]?.periodo ??
+      ''
+    )
+  }, [emissionDate, selectablePeriods])
+  const rangeStartOptions = useMemo(
+    () =>
+      selectablePeriods.filter(
+        (period) => !rangeEndPeriod || comparePeriods(period.periodo, rangeEndPeriod) <= 0,
+      ),
+    [rangeEndPeriod, selectablePeriods],
+  )
+  const rangeEndOptions = useMemo(
+    () =>
+      selectablePeriods.filter(
+        (period) => !rangeStartPeriod || comparePeriods(period.periodo, rangeStartPeriod) >= 0,
+      ),
+    [rangeStartPeriod, selectablePeriods],
+  )
+  const selectedPeriodSummary = useMemo(
+    () => buildPeriodSelectionSummary(selectedPeriods, periodLookup),
+    [selectedPeriods, periodLookup],
+  )
   const graceWindow = useMemo(
     () => buildGraceWindow(selectedMemberDetail?.periodosMensuales),
     [selectedMemberDetail?.periodosMensuales],
@@ -749,6 +873,28 @@ function CobrosRegistrarPage() {
     setQuantity(1)
     setSelectedPeriods([])
   }, [selectedConcept])
+
+  useEffect(() => {
+    if (!selectedConcept?.usaPeriodo) {
+      setVisiblePeriodYear(null)
+      setRangeStartPeriod('')
+      setRangeEndPeriod('')
+      return
+    }
+
+    const firstVisiblePeriod =
+      periodsMensuales.find((period) => period.selectable)?.periodo ?? periodsMensuales[0]?.periodo
+    const parsed = parsePeriodReference(firstVisiblePeriod)
+    setVisiblePeriodYear(parsed?.year ?? null)
+    setRangeStartPeriod(selectablePeriods[0]?.periodo ?? '')
+    setRangeEndPeriod(currentSelectionLimitPeriod || selectablePeriods[0]?.periodo || '')
+  }, [
+    currentSelectionLimitPeriod,
+    periodsMensuales,
+    selectablePeriods,
+    selectedConcept?.usaPeriodo,
+    selectedMemberDetail?.id,
+  ])
 
   const members = membersData?.content ?? []
   const memberTotalPages = membersData?.totalPages ?? 1
@@ -766,11 +912,90 @@ function CobrosRegistrarPage() {
   }, [draftItems])
 
   function togglePeriod(periodo) {
-    setSelectedPeriods((current) =>
-      current.includes(periodo)
+    setSelectedPeriods((current) => {
+      const nextSelection = current.includes(periodo)
         ? current.filter((value) => value !== periodo)
-        : [...current, periodo],
-    )
+        : [...current, periodo]
+
+      return sortPeriods(nextSelection)
+    })
+    setSubmitError('')
+  }
+
+  function applyPeriodRange(startPeriod, endPeriod) {
+    if (!startPeriod || !endPeriod) {
+      setSelectedPeriods([])
+      return
+    }
+
+    const safeStart =
+      comparePeriods(startPeriod, endPeriod) <= 0 ? startPeriod : endPeriod
+    const safeEnd =
+      comparePeriods(startPeriod, endPeriod) <= 0 ? endPeriod : startPeriod
+    const nextSelection = selectablePeriods
+      .filter(
+        (period) =>
+          comparePeriods(period.periodo, safeStart) >= 0 &&
+          comparePeriods(period.periodo, safeEnd) <= 0,
+      )
+      .map((period) => period.periodo)
+
+    setRangeStartPeriod(safeStart)
+    setRangeEndPeriod(safeEnd)
+    setSelectedPeriods(nextSelection)
+    setSubmitError('')
+
+    const parsed = parsePeriodReference(safeStart)
+    if (parsed) {
+      setVisiblePeriodYear(parsed.year)
+    }
+  }
+
+  function handleSelectAllPeriods() {
+    if (!selectablePeriods.length || !currentSelectionLimitPeriod) {
+      return
+    }
+
+    applyPeriodRange(selectablePeriods[0].periodo, currentSelectionLimitPeriod)
+  }
+
+  function handleRangeStartChange(nextStart) {
+    const safeEnd =
+      rangeEndPeriod && comparePeriods(nextStart, rangeEndPeriod) <= 0
+        ? rangeEndPeriod
+        : nextStart
+    applyPeriodRange(nextStart, safeEnd)
+  }
+
+  function handleRangeEndChange(nextEnd) {
+    const safeStart =
+      rangeStartPeriod && comparePeriods(rangeStartPeriod, nextEnd) <= 0
+        ? rangeStartPeriod
+        : nextEnd
+    applyPeriodRange(safeStart, nextEnd)
+  }
+
+  function handleClearSelectedPeriods() {
+    setSelectedPeriods([])
+    setRangeStartPeriod(selectablePeriods[0]?.periodo ?? '')
+    setRangeEndPeriod(currentSelectionLimitPeriod || selectablePeriods[0]?.periodo || '')
+    setSubmitError('')
+  }
+
+  function showPreviousPeriodYear() {
+    if (visiblePeriodYearIndex <= 0) {
+      return
+    }
+
+    setVisiblePeriodYear(periodYears[visiblePeriodYearIndex - 1])
+  }
+
+  function showNextPeriodYear() {
+    if (visiblePeriodYearIndex === -1 || visiblePeriodYearIndex >= periodYears.length - 1) {
+      return
+    }
+
+    setVisiblePeriodYear(periodYears[visiblePeriodYearIndex + 1])
   }
 
   function handleFractionationFormChange(field, value) {
@@ -802,6 +1027,7 @@ function CobrosRegistrarPage() {
         : 1
 
     const total = Number(selectedConcept.montoBase ?? 0) * conceptQuantity
+    const orderedSelectedPeriods = sortPeriods(selectedPeriods)
 
     setDraftItems((current) => [
       ...current,
@@ -813,7 +1039,7 @@ function CobrosRegistrarPage() {
         categoria: selectedConcept.categoria,
         usaPeriodo: selectedConcept.usaPeriodo,
         periodos: selectedConcept.usaPeriodo
-          ? selectedPeriods
+          ? orderedSelectedPeriods
               .map((periodo) =>
                 selectedMemberDetail.periodosMensuales.find((item) => item.periodo === periodo),
               )
@@ -823,6 +1049,15 @@ function CobrosRegistrarPage() {
         baseAmount: Number(selectedConcept.montoBase ?? 0),
         total,
         itemsCount: selectedConcept.usaPeriodo ? selectedPeriods.length : 1,
+        referencia: selectedConcept.usaPeriodo
+          ? buildPeriodRangeLabel(
+              orderedSelectedPeriods
+                .map((periodo) =>
+                  selectedMemberDetail.periodosMensuales.find((item) => item.periodo === periodo),
+                )
+                .filter(Boolean),
+            )
+          : null,
       },
     ])
 
@@ -1058,7 +1293,7 @@ function CobrosRegistrarPage() {
 
   return (
     <div className="space-y-6">
-      <section className="grid gap-5 xl:grid-cols-[minmax(0,1.3fr)_0.7fr] xl:items-stretch">
+      <section className="grid gap-5 xl:grid-cols-[minmax(0,1.38fr)_0.62fr] xl:items-stretch">
         <article className="h-full rounded-[30px] border border-white/80 bg-white p-5 shadow-[0_18px_50px_-38px_rgba(15,23,42,0.7)] sm:p-6">
           <div className="flex flex-col gap-4 border-b border-slate-200 pb-4 xl:flex-row xl:items-center xl:justify-between">
             <div>
@@ -1263,28 +1498,17 @@ function CobrosRegistrarPage() {
 
               {selectedMemberDetail.fraccionamientoActivo ? (
                 <div className="mt-3.5 rounded-[20px] border border-fuchsia-200 bg-fuchsia-50 px-3.5 py-3.5">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-fuchsia-700">
-                        Fraccionamiento activo
-                      </p>
-                      <p className="mt-1.5 text-sm font-semibold text-slate-950">
-                        {selectedMemberDetail.fraccionamientoActivo.cuotasPagadas}/
-                        {selectedMemberDetail.fraccionamientoActivo.numeroCuotas} cuotas pagadas
-                      </p>
-                      <p className="mt-1 text-xs text-slate-600">
-                        Saldo refinanciado pendiente:{' '}
-                        {formatCurrency(selectedMemberDetail.fraccionamientoActivo.saldoPendiente)}
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setIsFractionationModalOpen(true)}
-                      className="rounded-2xl border border-fuchsia-200 bg-white px-3 py-2 text-xs font-semibold text-fuchsia-700 transition hover:border-fuchsia-300"
-                    >
-                      Ver detalle
-                    </button>
-                  </div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-fuchsia-700">
+                    Fraccionamiento activo
+                  </p>
+                  <p className="mt-1.5 text-sm font-semibold text-slate-950">
+                    {selectedMemberDetail.fraccionamientoActivo.cuotasPagadas}/
+                    {selectedMemberDetail.fraccionamientoActivo.numeroCuotas} cuotas pagadas
+                  </p>
+                  <p className="mt-1 text-xs text-slate-600">
+                    Saldo refinanciado pendiente:{' '}
+                    {formatCurrency(selectedMemberDetail.fraccionamientoActivo.saldoPendiente)}
+                  </p>
 
                   {selectedMemberDetail.fraccionamientoActivo.siguienteCuota ? (
                     <div className="mt-3 rounded-2xl border border-fuchsia-200 bg-white px-3 py-3">
@@ -1339,7 +1563,7 @@ function CobrosRegistrarPage() {
         </article>
       </section>
 
-      <form onSubmit={handleSubmit} className="grid gap-5 xl:grid-cols-[minmax(0,1.3fr)_0.7fr] xl:items-stretch">
+      <form onSubmit={handleSubmit} className="grid gap-5 xl:grid-cols-[minmax(0,1.38fr)_0.62fr] xl:items-stretch">
         <article className="h-full rounded-[30px] border border-white/80 bg-white p-5 shadow-[0_18px_50px_-38px_rgba(15,23,42,0.7)] sm:p-6">
           <div className="flex items-center justify-between gap-4 border-b border-slate-200 pb-4">
             <div>
@@ -1376,7 +1600,7 @@ function CobrosRegistrarPage() {
                   value={selectedConceptId}
                   onChange={(event) => setSelectedConceptId(event.target.value)}
                   disabled={conceptsLoading}
-                  className="mt-3 h-[68px] w-full rounded-2xl border border-slate-200 bg-white px-5 text-sm font-semibold text-slate-700 outline-none transition focus:border-cobalt"
+                  className="mt-3 h-[60px] w-full rounded-2xl border border-slate-200 bg-white px-5 text-sm font-semibold text-slate-700 outline-none transition focus:border-cobalt"
                 >
                   {concepts.map((concept) => (
                     <option key={concept.id} value={concept.id}>
@@ -1396,7 +1620,7 @@ function CobrosRegistrarPage() {
                   value={selectedConcept?.usaPeriodo ? selectedPeriods.length || 1 : quantity}
                   onChange={(event) => setQuantity(Number(event.target.value) || 1)}
                   disabled={!selectedConcept?.permiteCantidad || selectedConcept?.usaPeriodo}
-                  className="mt-3 h-[68px] w-full rounded-2xl border border-slate-200 bg-white px-5 text-sm font-semibold text-slate-700 outline-none transition disabled:bg-slate-100 disabled:text-slate-400"
+                  className="mt-3 h-[60px] w-full rounded-2xl border border-slate-200 bg-white px-5 text-sm font-semibold text-slate-700 outline-none transition disabled:bg-slate-100 disabled:text-slate-400"
                 />
               </label>
 
@@ -1404,12 +1628,9 @@ function CobrosRegistrarPage() {
                 <span className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-600">
                   Monto del concepto
                 </span>
-                <div className="mt-3 flex h-[68px] flex-col justify-center rounded-2xl border border-slate-200 bg-white px-5">
+                <div className="mt-3 flex h-[60px] items-center rounded-2xl border border-slate-200 bg-white px-5">
                   <p className="text-lg font-semibold text-slate-950">
                     {buildConceptAmountLabel(selectedConcept)}
-                  </p>
-                  <p className="mt-1 text-sm text-slate-500">
-                    {buildConceptModeLabel(selectedConcept)}
                   </p>
                 </div>
               </div>
@@ -1417,50 +1638,171 @@ function CobrosRegistrarPage() {
 
             {selectedConcept?.usaPeriodo ? (
               <div className="mt-6">
-                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-600">
-                  Periodos del concepto
-                </p>
-                <div className="mt-4 flex flex-wrap gap-3">
-                  {selectedMemberDetail?.periodosMensuales?.map((period) => (
-                    <button
-                      key={period.periodo}
-                      type="button"
-                      disabled={!period.selectable}
-                      onClick={() => togglePeriod(period.periodo)}
-                      className={`rounded-2xl border px-4 py-3 text-sm font-semibold transition ${
-                        selectedPeriods.includes(period.periodo)
-                          ? 'border-cobalt bg-cobalt-soft text-cobalt shadow-[inset_0_-2px_0_0_#1739a6]'
-                          : periodToneByStatus[period.status] ?? 'border-slate-200 bg-white text-slate-600'
-                      } ${!period.selectable ? 'cursor-not-allowed opacity-90' : 'hover:-translate-y-0.5'}`}
-                    >
-                      {period.label}
-                    </button>
-                  ))}
+                <div className="flex flex-col gap-4 rounded-[24px] border border-slate-200 bg-[linear-gradient(180deg,#fbfcff_0%,#f8fafc_100%)] p-4">
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-600">
+                        Periodos del concepto
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      {selectedPeriodSummary ? (
+                        <span className="rounded-full bg-cobalt-soft px-3 py-2 text-xs font-semibold text-cobalt">
+                          {selectedPeriodSummary.title}: {selectedPeriodSummary.detail}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-slate-500">Selecciona uno o más meses.</span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={handleClearSelectedPeriods}
+                        disabled={selectedPeriods.length === 0}
+                        className="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-slate-600 transition hover:border-slate-300 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        Limpiar
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+                        Ano visible
+                      </p>
+                      <p className="mt-1 text-sm font-semibold text-slate-950">
+                        {activePeriodYear ?? '-'}
+                      </p>
+                    </div>
+
+                    <div className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white p-1.5">
+                      <button
+                        type="button"
+                        onClick={showPreviousPeriodYear}
+                        disabled={visiblePeriodYearIndex <= 0}
+                        className="inline-flex h-10 w-10 items-center justify-center rounded-xl text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        <ChevronLeft size={16} strokeWidth={2.2} />
+                      </button>
+                      <span className="min-w-[92px] text-center text-sm font-semibold text-slate-700">
+                        {activePeriodYear ?? '-'}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={showNextPeriodYear}
+                        disabled={
+                          visiblePeriodYearIndex === -1 ||
+                          visiblePeriodYearIndex >= periodYears.length - 1
+                        }
+                        className="inline-flex h-10 w-10 items-center justify-center rounded-xl text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        <ChevronRight size={16} strokeWidth={2.2} />
+                      </button>
+                    </div>
+                  </div>
+
+                  {visiblePeriods.length > 0 ? (
+                    <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6">
+                      {visiblePeriods.map((period) => (
+                        <button
+                          key={period.periodo}
+                          type="button"
+                          disabled={!period.selectable}
+                          onClick={() => togglePeriod(period.periodo)}
+                          className={`rounded-[22px] border px-3 py-2.5 text-left text-sm font-semibold transition ${
+                            selectedPeriods.includes(period.periodo)
+                              ? 'border-cobalt bg-cobalt-soft text-cobalt shadow-[inset_0_-2px_0_0_#1739a6]'
+                              : periodToneByStatus[period.status] ??
+                                'border-slate-200 bg-white text-slate-600'
+                          } ${!period.selectable ? 'cursor-not-allowed opacity-90' : 'hover:-translate-y-0.5'}`}
+                        >
+                          <span className="block leading-tight">{period.label}</span>
+                          <span className="mt-1 block text-[11px] font-semibold uppercase tracking-[0.14em] opacity-80">
+                            {period.status === 'PAID'
+                              ? 'Pagado'
+                              : period.status === 'GRACE'
+                                ? 'Vigente'
+                                : period.status === 'OVERDUE'
+                                  ? 'Deuda'
+                                  : period.status === 'REFINANCED'
+                                    ? 'Refinanciado'
+                                    : period.status === 'NOT_APPLICABLE'
+                                      ? 'No aplica'
+                                      : 'Proyectado'}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-6 text-center text-sm text-slate-500">
+                      No hay periodos disponibles para el ano seleccionado.
+                    </div>
+                  )}
+
+                  {selectablePeriods.length > 0 ? (
+                    <div className="border-t border-slate-200 pt-4">
+                      <div className="grid gap-4 md:grid-cols-[minmax(0,180px)_minmax(0,190px)_minmax(0,190px)_minmax(0,170px)] md:items-end">
+                        <button
+                          type="button"
+                          onClick={handleSelectAllPeriods}
+                          disabled={!currentSelectionLimitPeriod}
+                          className="inline-flex h-[48px] items-center justify-center rounded-2xl border border-cobalt/15 bg-cobalt-soft px-4 text-sm font-semibold text-cobalt transition hover:bg-[#dbe5ff] disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          Seleccionar todo
+                        </button>
+
+                        <label className="block min-w-[180px]">
+                          <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+                            Desde
+                          </span>
+                          <select
+                            value={rangeStartPeriod}
+                            onChange={(event) => handleRangeStartChange(event.target.value)}
+                            className="mt-2 h-[48px] w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 outline-none transition focus:border-cobalt"
+                          >
+                            {rangeStartOptions.map((period) => (
+                              <option key={period.periodo} value={period.periodo}>
+                                {period.label}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+
+                        <label className="block min-w-[180px]">
+                          <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+                            Hasta
+                          </span>
+                          <select
+                            value={rangeEndPeriod}
+                            onChange={(event) => handleRangeEndChange(event.target.value)}
+                            className="mt-2 h-[48px] w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 outline-none transition focus:border-cobalt"
+                          >
+                            {rangeEndOptions.map((period) => (
+                              <option key={period.periodo} value={period.periodo}>
+                                {period.label}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+
+                        <button
+                          type="button"
+                          onClick={handleAddItem}
+                          disabled={!canAddItem}
+                          className="inline-flex h-[48px] items-center justify-center rounded-2xl bg-[linear-gradient(135deg,#1739a6_0%,#204edc_100%)] px-4 text-sm font-semibold text-white shadow-[0_18px_34px_-24px_rgba(30,64,175,0.95)] transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0"
+                        >
+                          Agregar item
+                        </button>
+                      </div>
+
+                      <p className="mt-3 text-xs text-slate-500">
+                        El rango toma solo periodos cobrables. Por defecto llega hasta el mes actual.
+                      </p>
+                    </div>
+                  ) : null}
                 </div>
               </div>
             ) : null}
-
-            <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-5">
-              <div className="flex flex-wrap gap-2">
-                {buildConceptChips(selectedConcept).map((chip) => (
-                  <span
-                    key={chip}
-                    className="rounded-full bg-white px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500"
-                  >
-                    {chip}
-                  </span>
-                ))}
-              </div>
-
-              <button
-                type="button"
-                onClick={handleAddItem}
-                disabled={!canAddItem}
-                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[linear-gradient(135deg,#1739a6_0%,#204edc_100%)] px-5 py-3 text-sm font-semibold text-white shadow-[0_18px_34px_-24px_rgba(30,64,175,0.95)] transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0"
-              >
-                Agregar item
-              </button>
-            </div>
           </div>
 
           <div className="mt-5 space-y-3">
@@ -1476,27 +1818,13 @@ function CobrosRegistrarPage() {
                       <span className="rounded-full bg-cobalt-soft px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-cobalt">
                         {item.codigo}
                       </span>
-                      {item.referencia ? (
-                        <span className="rounded-full bg-fuchsia-50 px-3 py-1 text-xs font-semibold text-fuchsia-700">
-                          {item.referencia}
-                        </span>
-                      ) : null}
                     </div>
-                    <p className="mt-2 text-sm text-slate-500">{item.categoria}</p>
-                    {item.periodos.length > 0 ? (
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        {item.periodos.map((period) => (
-                          <span
-                            key={`${item.id}-${period.periodo}`}
-                            className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                              periodToneByStatus[period.status] ?? 'bg-slate-100 text-slate-600'
-                            }`}
-                          >
-                            {period.label}
-                          </span>
-                        ))}
-                      </div>
-                    ) : null}
+                    <p className="mt-2 text-sm text-slate-500">
+                      {item.categoria}
+                      {item.periodos.length > 0
+                        ? ` - ${item.referencia || buildPeriodRangeLabel(item.periodos)}`
+                        : ''}
+                    </p>
                   </div>
 
                   <div className="flex items-center gap-4">

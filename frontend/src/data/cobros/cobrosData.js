@@ -1,6 +1,8 @@
 export const cobrosModuleTabs = [
   { label: 'Resumen', path: '/caja-cobros/resumen' },
   { label: 'Registrar cobro', path: '/caja-cobros/registrar' },
+  { label: 'Venta de productos', path: '/caja-cobros/ventas-productos' },
+  { label: 'Fraccionamientos', path: '/caja-cobros/fraccionamientos' },
   { label: 'Historial', path: '/caja-cobros/historial' },
   { label: 'Comprobantes', path: '/caja-cobros/comprobantes' },
 ]

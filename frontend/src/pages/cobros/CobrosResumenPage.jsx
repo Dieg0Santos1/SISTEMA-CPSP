@@ -121,7 +121,7 @@ function CobrosResumenPage() {
         ))}
       </section>
 
-      <section className="grid gap-5 xl:grid-cols-[minmax(0,1.2fr)_0.8fr]">
+      <section className="grid gap-5 xl:grid-cols-[minmax(0,1.35fr)_0.65fr]">
         <article className="rounded-[30px] border border-white/80 bg-white p-5 shadow-[0_18px_50px_-38px_rgba(15,23,42,0.7)] sm:p-6">
           <div className="flex flex-col gap-3 border-b border-slate-200 pb-4 sm:flex-row sm:items-center sm:justify-between">
             <div>

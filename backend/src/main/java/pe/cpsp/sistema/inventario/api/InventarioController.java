@@ -11,11 +11,16 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import pe.cpsp.sistema.inventario.api.dto.InventarioClienteVentaResponse;
 import pe.cpsp.sistema.inventario.api.dto.InventarioDashboardResponse;
 import pe.cpsp.sistema.inventario.api.dto.InventarioProductoCreateRequest;
 import pe.cpsp.sistema.inventario.api.dto.InventarioProductoDetailResponse;
 import pe.cpsp.sistema.inventario.api.dto.InventarioProductoListItemResponse;
+import pe.cpsp.sistema.inventario.api.dto.InventarioRegistrarVentaRequest;
+import pe.cpsp.sistema.inventario.api.dto.InventarioVentaResponse;
+import pe.cpsp.sistema.inventario.api.dto.InventarioVentasPanelResponse;
 import pe.cpsp.sistema.inventario.application.InventarioService;
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/inventario")
@@ -30,6 +35,23 @@ public class InventarioController {
   @GetMapping
   public InventarioDashboardResponse getDashboard() {
     return inventarioService.getDashboard();
+  }
+
+  @GetMapping("/clientes")
+  public List<InventarioClienteVentaResponse> listClientesVenta() {
+    return inventarioService.listClientesVenta();
+  }
+
+  @GetMapping("/ventas")
+  public InventarioVentasPanelResponse getVentasPanel() {
+    return inventarioService.getVentasPanel();
+  }
+
+  @PostMapping("/ventas")
+  @ResponseStatus(HttpStatus.CREATED)
+  public InventarioVentaResponse registrarVenta(
+      @Valid @RequestBody InventarioRegistrarVentaRequest request) {
+    return inventarioService.registrarVenta(request);
   }
 
   @PostMapping("/productos")

@@ -9,4 +9,4 @@ public record EventoDetailResponse(
     String descripcion,
     LocalDateTime fechaHora,
     int asistenciasRegistradas,
-    List<EventoAttendanceMemberResponse> colegiados) {}
+    List<EventoAttendanceMemberResponse> participantes) {}

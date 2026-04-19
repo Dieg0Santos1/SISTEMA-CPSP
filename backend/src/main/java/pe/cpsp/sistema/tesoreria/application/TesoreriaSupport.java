@@ -25,6 +25,7 @@ class TesoreriaSupport {
   static final String CODIGO_APORTACION_MENSUAL = "APO-MEN";
   static final String CODIGO_CEREMONIA = "CER-JUR";
   static final String CODIGO_FRACCIONAMIENTO = "FRAC-CUO";
+  private static final int FUTURE_SELECTION_YEARS = 2;
   private static final List<String> MONTH_LABELS =
       List.of("Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic");
 
@@ -136,16 +137,13 @@ class TesoreriaSupport {
 
     List<PeriodoCobranza> periodStates = new ArrayList<>();
     if (firstDueMonth != null) {
-      YearMonth currentYearStart = YearMonth.of(today.getYear(), 1);
-      YearMonth currentYearEnd = YearMonth.of(today.getYear(), 12);
       YearMonth ceremonyMonth =
           ceremonyPaymentDate != null ? YearMonth.from(ceremonyPaymentDate) : null;
       YearMonth displayStart =
-          ceremonyMonth != null && ceremonyMonth.getYear() == today.getYear()
-              ? ceremonyMonth
-              : currentYearStart;
+          ceremonyMonth != null ? YearMonth.of(ceremonyMonth.getYear(), 1) : firstDueMonth;
+      YearMonth displayEnd = YearMonth.of(today.getYear() + FUTURE_SELECTION_YEARS, 12);
 
-      if (!displayStart.isAfter(currentYearEnd)) {
+      if (!displayStart.isAfter(displayEnd)) {
         YearMonth graceStart = null;
         YearMonth graceEnd = null;
 
@@ -161,7 +159,11 @@ class TesoreriaSupport {
         boolean graceWindowStillOpen =
             graceEnd != null && !YearMonth.from(today).isAfter(graceEnd);
 
-        while (!cursor.isAfter(currentYearEnd)) {
+        while (!cursor.isAfter(displayEnd)) {
+          boolean beforeCeremonyYearMonth =
+              ceremonyMonth != null
+                  && cursor.getYear() == ceremonyMonth.getYear()
+                  && cursor.isBefore(ceremonyMonth);
           boolean coveredByCeremony =
               ceremonyMonth != null
                   && ceremonyMonth.equals(cursor)
@@ -169,7 +171,10 @@ class TesoreriaSupport {
 
           String status;
           boolean selectable;
-          if (paidPeriods.contains(cursor) || coveredByCeremony) {
+          if (beforeCeremonyYearMonth) {
+            status = "NOT_APPLICABLE";
+            selectable = false;
+          } else if (paidPeriods.contains(cursor) || coveredByCeremony) {
             status = "PAID";
             selectable = false;
           } else if (refinancedPeriods.contains(cursor)) {
@@ -181,6 +186,9 @@ class TesoreriaSupport {
                   && !cursor.isBefore(graceStart)
                   && !cursor.isAfter(graceEnd)) {
             status = "GRACE";
+            selectable = true;
+          } else if (cursor.isAfter(currentMonth)) {
+            status = "UPCOMING";
             selectable = true;
           } else {
             status = "OVERDUE";

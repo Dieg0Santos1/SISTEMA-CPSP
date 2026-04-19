@@ -21,6 +21,7 @@ import { colegiadosFilters } from '../data/colegiados/colegiadosData'
 const statusStyles = {
   HABILITADO: 'bg-emerald-100 text-emerald-700',
   NO_HABILITADO: 'bg-red-100 text-red-600',
+  ACTIVO: 'bg-sky-100 text-sky-700',
 }
 
 const emptyForm = {
@@ -35,6 +36,27 @@ const emptyForm = {
   celular: '',
   email: '',
   direccion: '',
+  fotoUrl: '',
+}
+
+const externalTypeOptions = [
+  'Psicologo no colegiado',
+  'Estudiante',
+  'Participante externo',
+  'Cliente externo',
+  'Otro',
+]
+
+const emptyExternalForm = {
+  tipoExterno: 'Participante externo',
+  nombres: '',
+  apellidoPaterno: '',
+  apellidoMaterno: '',
+  dni: '',
+  sexo: '',
+  fechaNacimiento: '',
+  celular: '',
+  email: '',
   fotoUrl: '',
 }
 
@@ -88,7 +110,14 @@ const formatBirthdayMonthDay = (value) => {
 }
 
 const formatStatusLabel = (status) =>
-  status === 'HABILITADO' ? 'Habilitado' : 'No Habilitado'
+  status === 'HABILITADO'
+    ? 'Habilitado'
+    : status === 'ACTIVO'
+      ? 'Activo'
+      : 'No Habilitado'
+
+const formatRecordTypeLabel = (recordType) =>
+  recordType === 'EXTERNO' ? 'Otro' : 'Colegiado'
 
 const normalizeDniInput = (value) => value.replace(/\D/g, '').slice(0, 8)
 
@@ -136,6 +165,7 @@ const buildVigenciaLabel = (colegiado) => {
 }
 
 const mapColegiadoToRow = (colegiado) => ({
+  recordType: 'COLEGIADO',
   id: colegiado.id,
   code: colegiado.codigoColegiatura,
   dni: colegiado.dni,
@@ -160,6 +190,38 @@ const mapColegiadoToRow = (colegiado) => ({
   ultimaCuotaPeriodo: colegiado.ultimaCuotaPeriodo,
   habilitadoHasta: colegiado.habilitadoHasta,
   especialidades: Array.isArray(colegiado.especialidades) ? colegiado.especialidades : [],
+  tipoExterno: '',
+  fechaIniciacionLabel: colegiado.fechaIniciacion,
+})
+
+const mapExternoToRow = (externo) => ({
+  recordType: 'EXTERNO',
+  id: externo.id,
+  code: externo.codigoExterno,
+  dni: externo.dni,
+  name: externo.nombreCompleto,
+  nombres: externo.nombre,
+  apellidoPaterno: externo.apellidoPaterno,
+  apellidoMaterno: externo.apellidoMaterno,
+  initials: getInitials(externo.nombreCompleto),
+  avatarTone: getAvatarTone(externo.nombreCompleto),
+  status: 'Activo',
+  statusCode: externo.estado ?? 'ACTIVO',
+  statusTone: statusStyles[externo.estado ?? 'ACTIVO'] ?? 'bg-slate-100 text-slate-600',
+  photo: externo.fotoUrl,
+  vigencia: externo.tipoExterno,
+  sexo: externo.sexo ?? 'No registrado',
+  fechaNacimiento: externo.fechaNacimiento,
+  fechaIniciacion: null,
+  email: externo.email ?? 'No registrado',
+  celular: externo.celular ?? 'No registrado',
+  ruc: 'No registrado',
+  direccion: 'No registrada',
+  ultimaCuotaPeriodo: null,
+  habilitadoHasta: null,
+  especialidades: [],
+  tipoExterno: externo.tipoExterno,
+  fechaIniciacionLabel: null,
 })
 
 const emptyIfPlaceholder = (value) =>
@@ -180,6 +242,19 @@ const buildFormValuesFromColegiado = (colegiado) => ({
   fotoUrl: colegiado.photo ?? '',
 })
 
+const buildFormValuesFromExterno = (externo) => ({
+  tipoExterno: externo.tipoExterno ?? 'Participante externo',
+  nombres: externo.nombres ?? '',
+  apellidoPaterno: externo.apellidoPaterno ?? '',
+  apellidoMaterno: externo.apellidoMaterno ?? '',
+  dni: externo.dni ?? '',
+  sexo: emptyIfPlaceholder(externo.sexo),
+  fechaNacimiento: externo.fechaNacimiento ?? '',
+  celular: emptyIfPlaceholder(externo.celular),
+  email: emptyIfPlaceholder(externo.email),
+  fotoUrl: externo.photo ?? '',
+})
+
 const buildColegiadoPayload = (formValues) => ({
   nombre: formValues.nombres.trim(),
   apellidoPaterno: formValues.apellidoPaterno.trim(),
@@ -195,6 +270,19 @@ const buildColegiadoPayload = (formValues) => ({
   fotoUrl: formValues.fotoUrl,
 })
 
+const buildExternoPayload = (formValues) => ({
+  tipoExterno: formValues.tipoExterno,
+  nombre: formValues.nombres.trim(),
+  apellidoPaterno: formValues.apellidoPaterno.trim(),
+  apellidoMaterno: formValues.apellidoMaterno.trim(),
+  dni: formValues.dni.trim(),
+  sexo: formValues.sexo,
+  fechaNacimiento: formValues.fechaNacimiento,
+  celular: formValues.celular.trim(),
+  email: formValues.email.trim(),
+  fotoUrl: formValues.fotoUrl,
+})
+
 function ColegiadosPage() {
   const [rows, setRows] = useState([])
   const [activeFilter, setActiveFilter] = useState(colegiadosFilters[0])
@@ -202,12 +290,14 @@ function ColegiadosPage() {
   const [currentPage, setCurrentPage] = useState(1)
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
   const [formMode, setFormMode] = useState('create')
+  const [createTab, setCreateTab] = useState('COLEGIADO')
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false)
   const [isEspecialidadesModalOpen, setIsEspecialidadesModalOpen] = useState(false)
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
   const [selectedColegiado, setSelectedColegiado] = useState(null)
   const [shouldReturnToDetail, setShouldReturnToDetail] = useState(false)
   const [formValues, setFormValues] = useState(emptyForm)
+  const [externalFormValues, setExternalFormValues] = useState(emptyExternalForm)
   const [photoPreview, setPhotoPreview] = useState('')
   const [especialidadesForm, setEspecialidadesForm] = useState([''])
   const [isLoading, setIsLoading] = useState(true)
@@ -223,16 +313,27 @@ function ColegiadosPage() {
     setErrorMessage('')
 
     try {
-      const response = await fetch(`${API_BASE_URL}/colegiados`, {
-        credentials: 'include',
-      })
+      const [colegiadosResponse, externosResponse] = await Promise.all([
+        fetch(`${API_BASE_URL}/colegiados`, {
+          credentials: 'include',
+        }),
+        fetch(`${API_BASE_URL}/colegiados/externos`, {
+          credentials: 'include',
+        }),
+      ])
 
-      if (!response.ok) {
+      if (!colegiadosResponse.ok || !externosResponse.ok) {
         throw new Error('No se pudo cargar el padron desde el backend.')
       }
 
-      const data = await response.json()
-      const mappedRows = data.map(mapColegiadoToRow)
+      const [colegiadosData, externosData] = await Promise.all([
+        colegiadosResponse.json(),
+        externosResponse.json(),
+      ])
+      const mappedRows = [
+        ...colegiadosData.map(mapColegiadoToRow),
+        ...externosData.map(mapExternoToRow),
+      ].sort((left, right) => left.name.localeCompare(right.name, 'es'))
       setRows(mappedRows)
 
       if (selectedColegiado) {
@@ -255,7 +356,11 @@ function ColegiadosPage() {
 
     return rows.filter((colegiado) => {
       const matchesFilter =
-        activeFilter === 'Todos' ? true : colegiado.status === activeFilter
+        activeFilter === 'Todos'
+          ? true
+          : activeFilter === 'Otros'
+            ? colegiado.recordType === 'EXTERNO'
+            : colegiado.status === activeFilter
 
       const matchesSearch =
         normalizedSearch.length === 0
@@ -266,6 +371,8 @@ function ColegiadosPage() {
               colegiado.name,
               colegiado.vigencia,
               colegiado.email,
+              colegiado.tipoExterno,
+              formatRecordTypeLabel(colegiado.recordType),
               ...colegiado.especialidades,
             ].some((value) => value.toLowerCase().includes(normalizedSearch))
 
@@ -275,10 +382,11 @@ function ColegiadosPage() {
 
   const summaryCards = useMemo(() => {
     const totalRegistrados = rows.length
-    const habilitados = rows.filter((colegiado) => colegiado.status === 'Habilitado').length
-    const noHabilitados = rows.filter((colegiado) => colegiado.status !== 'Habilitado').length
-    const habilitadosPercent =
-      totalRegistrados === 0 ? 0 : (habilitados / totalRegistrados) * 100
+    const colegiados = rows.filter((item) => item.recordType === 'COLEGIADO')
+    const habilitados = colegiados.filter((colegiado) => colegiado.status === 'Habilitado').length
+    const noHabilitados = colegiados.filter((colegiado) => colegiado.status !== 'Habilitado').length
+    const externos = rows.filter((item) => item.recordType === 'EXTERNO').length
+    const habilitadosPercent = colegiados.length === 0 ? 0 : (habilitados / colegiados.length) * 100
 
     return [
       {
@@ -307,6 +415,15 @@ function ColegiadosPage() {
         icon: UserMinus,
         accent: 'border-[#ffe9b5]',
         badgeTone: 'bg-[#fff1c9] text-amber-700',
+      },
+      {
+        title: 'Otros registrados',
+        value: formatCount(externos),
+        note: externos === 0 ? 'Sin externos' : 'Participantes y clientes',
+        helper: 'Registros fuera de colegiatura',
+        icon: Users,
+        accent: 'border-[#d6ecff]',
+        badgeTone: 'bg-[#e1f2ff] text-sky-700',
       },
     ]
   }, [rows])
@@ -338,9 +455,11 @@ function ColegiadosPage() {
 
   const openCreateModal = () => {
     setFormMode('create')
+    setCreateTab('COLEGIADO')
     setShouldReturnToDetail(false)
     setErrorMessage('')
     setFormValues(emptyForm)
+    setExternalFormValues(emptyExternalForm)
     setPhotoPreview('')
     setIsCreateModalOpen(true)
   }
@@ -351,8 +470,10 @@ function ColegiadosPage() {
 
     setIsCreateModalOpen(false)
     setFormMode('create')
+    setCreateTab('COLEGIADO')
     setShouldReturnToDetail(false)
     setFormValues(emptyForm)
+    setExternalFormValues(emptyExternalForm)
     setPhotoPreview('')
 
     if (shouldReopenDetail) {
@@ -372,9 +493,15 @@ function ColegiadosPage() {
   const openEditModal = (colegiado, options = {}) => {
     setSelectedColegiado(colegiado)
     setFormMode('edit')
+    setCreateTab(colegiado.recordType)
     setShouldReturnToDetail(Boolean(options.returnToDetail))
     setErrorMessage('')
-    setFormValues(buildFormValuesFromColegiado(colegiado))
+    setFormValues(
+      colegiado.recordType === 'COLEGIADO' ? buildFormValuesFromColegiado(colegiado) : emptyForm,
+    )
+    setExternalFormValues(
+      colegiado.recordType === 'EXTERNO' ? buildFormValuesFromExterno(colegiado) : emptyExternalForm,
+    )
     setPhotoPreview(colegiado.photo ?? '')
     setIsDetailModalOpen(false)
     setIsCreateModalOpen(true)
@@ -421,14 +548,39 @@ function ColegiadosPage() {
     }))
   }
 
+  const handleExternalInputChange = (event) => {
+    const { name } = event.target
+    let { value } = event.target
+
+    if (name === 'dni') {
+      value = normalizeDniInput(value)
+    }
+
+    if (name === 'celular') {
+      value = normalizeCelularInput(value)
+    }
+
+    setExternalFormValues((current) => ({
+      ...current,
+      [name]: value,
+    }))
+  }
+
   const handlePhotoChange = (event) => {
     const file = event.target.files?.[0]
 
     if (!file) {
-      setFormValues((current) => ({
-        ...current,
-        fotoUrl: '',
-      }))
+      if (createTab === 'EXTERNO') {
+        setExternalFormValues((current) => ({
+          ...current,
+          fotoUrl: '',
+        }))
+      } else {
+        setFormValues((current) => ({
+          ...current,
+          fotoUrl: '',
+        }))
+      }
       setPhotoPreview('')
       return
     }
@@ -437,10 +589,17 @@ function ColegiadosPage() {
     reader.onload = () => {
       const result = typeof reader.result === 'string' ? reader.result : ''
 
-      setFormValues((current) => ({
-        ...current,
-        fotoUrl: result,
-      }))
+      if (createTab === 'EXTERNO') {
+        setExternalFormValues((current) => ({
+          ...current,
+          fotoUrl: result,
+        }))
+      } else {
+        setFormValues((current) => ({
+          ...current,
+          fotoUrl: result,
+        }))
+      }
       setPhotoPreview(result)
     }
     reader.readAsDataURL(file)
@@ -469,38 +628,50 @@ function ColegiadosPage() {
     event.preventDefault()
 
     const isEditMode = formMode === 'edit' && selectedColegiado
+    const isExternal = createTab === 'EXTERNO'
+    const requestPayload = isExternal
+      ? buildExternoPayload(externalFormValues)
+      : buildColegiadoPayload(formValues)
 
     setIsSubmitting(true)
     setErrorMessage('')
 
     try {
       const response = await fetch(
-        isEditMode
-          ? `${API_BASE_URL}/colegiados/${selectedColegiado.id}`
-          : `${API_BASE_URL}/colegiados`,
+        isExternal
+          ? isEditMode
+            ? `${API_BASE_URL}/colegiados/externos/${selectedColegiado.id}`
+            : `${API_BASE_URL}/colegiados/externos`
+          : isEditMode
+            ? `${API_BASE_URL}/colegiados/${selectedColegiado.id}`
+            : `${API_BASE_URL}/colegiados`,
         {
           method: isEditMode ? 'PUT' : 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
           credentials: 'include',
-          body: JSON.stringify(buildColegiadoPayload(formValues)),
+          body: JSON.stringify(requestPayload),
         },
       )
 
       if (!response.ok) {
-        const payload = await response.json().catch(() => null)
-        const details = Array.isArray(payload?.details) ? payload.details.join(' ') : ''
+        const responsePayload = await response.json().catch(() => null)
+        const details = Array.isArray(responsePayload?.details)
+          ? responsePayload.details.join(' ')
+          : ''
         throw new Error(
           details ||
-            payload?.message ||
+            responsePayload?.message ||
             (isEditMode
-              ? 'No se pudieron guardar los cambios del colegiado.'
-              : 'No se pudo registrar el colegiado en el backend.'),
+              ? `No se pudieron guardar los cambios del ${isExternal ? 'registro externo' : 'colegiado'}.`
+              : `No se pudo registrar el ${isExternal ? 'externo' : 'colegiado'} en el backend.`),
         )
       }
 
-      const savedColegiado = mapColegiadoToRow(await response.json())
+      const savedColegiado = isExternal
+        ? mapExternoToRow(await response.json())
+        : mapColegiadoToRow(await response.json())
 
       if (isEditMode) {
         setRows((current) =>
@@ -526,8 +697,8 @@ function ColegiadosPage() {
         error instanceof Error
           ? error.message
           : isEditMode
-            ? 'No se pudieron guardar los cambios del colegiado.'
-            : 'No se pudo registrar el colegiado en el backend.',
+            ? `No se pudieron guardar los cambios del ${isExternal ? 'registro externo' : 'colegiado'}.`
+            : `No se pudo registrar el ${isExternal ? 'externo' : 'colegiado'} en el backend.`,
       )
     } finally {
       setIsSubmitting(false)
@@ -595,20 +766,29 @@ function ColegiadosPage() {
       return
     }
 
+    const isExternal = selectedColegiado.recordType === 'EXTERNO'
+
     setIsDeleting(true)
     setErrorMessage('')
 
     try {
-      const response = await fetch(`${API_BASE_URL}/colegiados/${selectedColegiado.id}`, {
-        method: 'DELETE',
-        credentials: 'include',
-      })
+      const response = await fetch(
+        isExternal
+          ? `${API_BASE_URL}/colegiados/externos/${selectedColegiado.id}`
+          : `${API_BASE_URL}/colegiados/${selectedColegiado.id}`,
+        {
+          method: 'DELETE',
+          credentials: 'include',
+        },
+      )
 
       if (!response.ok) {
         const payload = await response.json().catch(() => null)
         const details = Array.isArray(payload?.details) ? payload.details.join(' ') : ''
         throw new Error(
-          details || payload?.message || 'No se pudo eliminar el colegiado seleccionado.',
+          details ||
+            payload?.message ||
+            `No se pudo eliminar el ${isExternal ? 'externo' : 'colegiado'} seleccionado.`,
         )
       }
 
@@ -622,7 +802,7 @@ function ColegiadosPage() {
       setErrorMessage(
         error instanceof Error
           ? error.message
-          : 'No se pudo eliminar el colegiado seleccionado.',
+          : `No se pudo eliminar el ${isExternal ? 'externo' : 'colegiado'} seleccionado.`,
       )
     } finally {
       setIsDeleting(false)
@@ -677,10 +857,10 @@ function ColegiadosPage() {
             </div>
 
             <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-950 sm:text-4xl">
-              Gestion de Colegiados
+              Gestion de personas
             </h1>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600 sm:text-base">
-              Administre el padron oficial de psicologos colegiados en la region Lima.
+              Administre colegiados y otros perfiles externos para tener un padron unico listo para futuras ventas y eventos.
             </p>
           </div>
 
@@ -698,12 +878,12 @@ function ColegiadosPage() {
               className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[linear-gradient(135deg,#1739a6_0%,#204edc_100%)] px-5 py-3 text-sm font-semibold text-white shadow-[0_18px_34px_-24px_rgba(30,64,175,0.95)] transition hover:-translate-y-0.5"
             >
               <Plus size={16} strokeWidth={2.2} />
-              Nuevo Colegiado
+              Nuevo registro
             </button>
           </div>
         </section>
 
-        <section className="grid gap-4 lg:grid-cols-3">
+        <section className="grid gap-4 xl:grid-cols-4">
           {summaryCards.map((card) => (
             <article
               key={card.title}
@@ -786,7 +966,7 @@ function ColegiadosPage() {
                   type="search"
                   value={searchTerm}
                   onChange={handleSearchChange}
-                  placeholder="Buscar por DNI, nombre, codigo, vigencia, email o especialidad"
+                  placeholder="Buscar por DNI, nombre, codigo, perfil, email o especialidad"
                   className="w-full bg-transparent text-sm font-medium text-slate-700 outline-none placeholder:text-slate-400"
                 />
               </label>
@@ -806,7 +986,7 @@ function ColegiadosPage() {
               <span>Codigo</span>
               <span>DNI</span>
               <span>Nombre completo</span>
-              <span>Vigencia</span>
+              <span>Perfil</span>
               <span>Estado</span>
               <span>Acciones</span>
             </div>
@@ -848,6 +1028,16 @@ function ColegiadosPage() {
                         <p className="max-w-[17rem] font-semibold leading-6 text-slate-900">
                           {colegiado.name}
                         </p>
+                        <div className="flex flex-wrap gap-2">
+                          <span className="rounded-full bg-[#eef4ff] px-2.5 py-1 text-[11px] font-semibold text-cobalt">
+                            {formatRecordTypeLabel(colegiado.recordType)}
+                          </span>
+                          {colegiado.recordType === 'EXTERNO' && colegiado.tipoExterno ? (
+                            <span className="rounded-full bg-sky-50 px-2.5 py-1 text-[11px] font-semibold text-sky-700">
+                              {colegiado.tipoExterno}
+                            </span>
+                          ) : null}
+                        </div>
                         {colegiado.especialidades.length > 0 ? (
                           <div className="flex flex-wrap gap-2">
                             {colegiado.especialidades.slice(0, 2).map((especialidad) => (
@@ -870,7 +1060,7 @@ function ColegiadosPage() {
 
                     <div>
                       <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-400 lg:hidden">
-                        Vigencia
+                        Perfil
                       </p>
                       <p className="max-w-[16rem] text-sm leading-6 text-slate-600">
                         {colegiado.vigencia}
@@ -947,8 +1137,7 @@ function ColegiadosPage() {
 
           <div className="mt-5 flex flex-col gap-4 text-sm text-slate-500 sm:flex-row sm:items-center sm:justify-between">
             <p>
-              Mostrando {startResult} a {endResult} de {filteredRows.length} colegiados
-              filtrados
+              Mostrando {startResult} a {endResult} de {filteredRows.length} registros filtrados
             </p>
 
             <div className="flex items-center gap-2">
@@ -997,23 +1186,58 @@ function ColegiadosPage() {
                   {isEditMode ? 'Actualizacion de datos' : 'Registro Manual'}
                 </p>
                 <h2 className="mt-2 text-2xl font-bold tracking-tight text-slate-950">
-                  {isEditMode ? 'Editar colegiado' : 'Nuevo colegiado'}
+                  {isEditMode
+                    ? createTab === 'EXTERNO'
+                      ? 'Editar registro externo'
+                      : 'Editar colegiado'
+                    : 'Nuevo registro'}
                 </h2>
                 <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
                   {isEditMode
-                    ? 'Corrige o actualiza la informacion del colegiado sin alterar su codigo de colegiatura.'
-                    : 'Registra los datos base del colegiado y deja lista su informacion para validacion posterior.'}
+                    ? createTab === 'EXTERNO'
+                      ? 'Actualiza los datos del perfil externo sin alterar su codigo de registro.'
+                      : 'Corrige o actualiza la informacion del colegiado sin alterar su codigo de colegiatura.'
+                    : 'Registra colegiados u otros perfiles externos en un flujo guiado y separado.'}
                 </p>
               </div>
 
-              <button
-                type="button"
-                onClick={closeCreateModal}
-                aria-label="Cerrar modal"
-                className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-500 transition hover:border-slate-300 hover:text-slate-900"
-              >
-                <X size={18} strokeWidth={2.2} />
-              </button>
+              <div className="flex items-start gap-4">
+                <div className="inline-flex rounded-2xl bg-white p-1 shadow-[inset_0_0_0_1px_rgba(226,232,240,0.9)]">
+                  {[
+                    ['COLEGIADO', 'Colegiado'],
+                    ['EXTERNO', 'Otro'],
+                  ].map(([value, label]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => {
+                        setCreateTab(value)
+                        setErrorMessage('')
+                        setPhotoPreview(
+                          value === 'EXTERNO' ? externalFormValues.fotoUrl : formValues.fotoUrl,
+                        )
+                      }}
+                      disabled={isEditMode}
+                      className={`rounded-[14px] px-4 py-2.5 text-sm font-semibold transition ${
+                        createTab === value
+                          ? 'bg-[linear-gradient(135deg,#1739a6_0%,#204edc_100%)] text-white shadow-[0_16px_30px_-24px_rgba(30,64,175,0.9)]'
+                          : 'text-slate-600 hover:text-slate-900'
+                      } disabled:cursor-not-allowed disabled:opacity-70`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={closeCreateModal}
+                  aria-label="Cerrar modal"
+                  className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-500 transition hover:border-slate-300 hover:text-slate-900"
+                >
+                  <X size={18} strokeWidth={2.2} />
+                </button>
+              </div>
             </div>
 
             <form onSubmit={handleSubmitColegiado} className="space-y-6 px-6 py-6 sm:px-8 sm:py-7">
@@ -1026,7 +1250,7 @@ function ColegiadosPage() {
               <div className="grid gap-6 lg:grid-cols-[300px_1fr]">
                 <div className="rounded-[28px] border border-slate-200 bg-[#f4f7ff] p-5">
                   <p className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">
-                    Foto del colegiado
+                    {createTab === 'EXTERNO' ? 'Foto del registro externo' : 'Foto del colegiado'}
                   </p>
 
                   <div className="mt-4 flex flex-col items-center gap-4">
@@ -1067,7 +1291,7 @@ function ColegiadosPage() {
                   {isEditMode && selectedColegiado ? (
                     <label className="space-y-2 lg:col-span-3">
                       <span className="text-sm font-semibold text-slate-700">
-                        Codigo de colegiatura
+                        {createTab === 'EXTERNO' ? 'Codigo de registro' : 'Codigo de colegiatura'}
                       </span>
                       <input
                         type="text"
@@ -1082,160 +1306,294 @@ function ColegiadosPage() {
                     </label>
                   ) : null}
 
-                  <label className="space-y-2 lg:col-span-3">
-                    <span className="text-sm font-semibold text-slate-700">Nombres</span>
-                    <input
-                      type="text"
-                      name="nombres"
-                      value={formValues.nombres}
-                      onChange={handleInputChange}
-                      required
-                      placeholder="Ingrese los nombres"
-                      className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-cobalt"
-                    />
-                  </label>
+                  {createTab === 'EXTERNO' ? (
+                    <>
+                      <label className="space-y-2">
+                        <span className="text-sm font-semibold text-slate-700">Nombre</span>
+                        <input
+                          type="text"
+                          name="nombres"
+                          value={externalFormValues.nombres}
+                          onChange={handleExternalInputChange}
+                          required
+                          placeholder="Ingrese el nombre"
+                          className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-cobalt"
+                        />
+                      </label>
 
-                  <label className="space-y-2">
-                    <span className="text-sm font-semibold text-slate-700">DNI</span>
-                    <input
-                      type="text"
-                      name="dni"
-                      value={formValues.dni}
-                      onChange={handleInputChange}
-                      required
-                      maxLength={8}
-                      placeholder="Ingrese el DNI"
-                      className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-cobalt"
-                    />
-                  </label>
+                      <label className="space-y-2">
+                        <span className="text-sm font-semibold text-slate-700">
+                          Apellido paterno
+                        </span>
+                        <input
+                          type="text"
+                          name="apellidoPaterno"
+                          value={externalFormValues.apellidoPaterno}
+                          onChange={handleExternalInputChange}
+                          required
+                          placeholder="Apellido paterno"
+                          className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-cobalt"
+                        />
+                      </label>
 
-                  <label className="space-y-2">
-                    <span className="text-sm font-semibold text-slate-700">
-                      Apellido paterno
-                    </span>
-                    <input
-                      type="text"
-                      name="apellidoPaterno"
-                      value={formValues.apellidoPaterno}
-                      onChange={handleInputChange}
-                      required
-                      placeholder="Apellido paterno"
-                      className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-cobalt"
-                    />
-                  </label>
+                      <label className="space-y-2">
+                        <span className="text-sm font-semibold text-slate-700">
+                          Apellido materno
+                        </span>
+                        <input
+                          type="text"
+                          name="apellidoMaterno"
+                          value={externalFormValues.apellidoMaterno}
+                          onChange={handleExternalInputChange}
+                          required
+                          placeholder="Apellido materno"
+                          className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-cobalt"
+                        />
+                      </label>
 
-                  <label className="space-y-2">
-                    <span className="text-sm font-semibold text-slate-700">
-                      Apellido materno
-                    </span>
-                    <input
-                      type="text"
-                      name="apellidoMaterno"
-                      value={formValues.apellidoMaterno}
-                      onChange={handleInputChange}
-                      required
-                      placeholder="Apellido materno"
-                      className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-cobalt"
-                    />
-                  </label>
+                      <label className="space-y-2">
+                        <span className="text-sm font-semibold text-slate-700">Tipo de externo</span>
+                        <select
+                          name="tipoExterno"
+                          value={externalFormValues.tipoExterno}
+                          onChange={handleExternalInputChange}
+                          required
+                          className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-cobalt"
+                        >
+                          {externalTypeOptions.map((option) => (
+                            <option key={option} value={option}>
+                              {option}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
 
-                  <label className="space-y-2">
-                    <span className="text-sm font-semibold text-slate-700">Sexo</span>
-                    <select
-                      name="sexo"
-                      value={formValues.sexo}
-                      onChange={handleInputChange}
-                      required
-                      className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-cobalt"
-                    >
-                      <option value="">Seleccione una opcion</option>
-                      <option value="Femenino">Femenino</option>
-                      <option value="Masculino">Masculino</option>
-                      <option value="Otro">Otro</option>
-                    </select>
-                  </label>
+                      <label className="space-y-2">
+                        <span className="text-sm font-semibold text-slate-700">DNI</span>
+                        <input
+                          type="text"
+                          name="dni"
+                          value={externalFormValues.dni}
+                          onChange={handleExternalInputChange}
+                          required
+                          maxLength={8}
+                          placeholder="Ingrese el DNI"
+                          className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-cobalt"
+                        />
+                      </label>
 
-                  <label className="space-y-2">
-                    <span className="text-sm font-semibold text-slate-700">
-                      Fecha de nacimiento
-                    </span>
-                    <input
-                      type="date"
-                      name="fechaNacimiento"
-                      value={formValues.fechaNacimiento}
-                      onChange={handleInputChange}
-                      required
-                      className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-cobalt"
-                    />
-                  </label>
+                      <label className="space-y-2">
+                        <span className="text-sm font-semibold text-slate-700">
+                          Fecha de nacimiento
+                        </span>
+                        <input
+                          type="date"
+                          name="fechaNacimiento"
+                          value={externalFormValues.fechaNacimiento}
+                          onChange={handleExternalInputChange}
+                          required
+                          className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-cobalt"
+                        />
+                      </label>
 
-                  <label className="space-y-2">
-                    <span className="text-sm font-semibold text-slate-700">
-                      Fecha de iniciacion
-                    </span>
-                    <input
-                      type="date"
-                      name="fechaIniciacion"
-                      value={formValues.fechaIniciacion}
-                      onChange={handleInputChange}
-                      required
-                      className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-cobalt"
-                    />
-                  </label>
+                      <label className="space-y-2">
+                        <span className="text-sm font-semibold text-slate-700">Sexo</span>
+                        <select
+                          name="sexo"
+                          value={externalFormValues.sexo}
+                          onChange={handleExternalInputChange}
+                          required
+                          className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-cobalt"
+                        >
+                          <option value="">Seleccione una opcion</option>
+                          <option value="Femenino">Femenino</option>
+                          <option value="Masculino">Masculino</option>
+                          <option value="Otro">Otro</option>
+                        </select>
+                      </label>
 
-                  <label className="space-y-2 lg:col-span-1">
-                    <span className="text-sm font-semibold text-slate-700">
-                      RUC (opcional)
-                    </span>
-                    <input
-                      type="text"
-                      name="ruc"
-                      value={formValues.ruc}
-                      onChange={handleInputChange}
-                      placeholder="Ingrese su RUC si aplica"
-                      className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-cobalt"
-                    />
-                  </label>
+                      <label className="space-y-2">
+                        <span className="text-sm font-semibold text-slate-700">Celular</span>
+                        <input
+                          type="tel"
+                          name="celular"
+                          value={externalFormValues.celular}
+                          onChange={handleExternalInputChange}
+                          required
+                          placeholder="+51999999999"
+                          className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-cobalt"
+                        />
+                      </label>
 
-                  <label className="space-y-2 lg:col-span-2">
-                    <span className="text-sm font-semibold text-slate-700">Celular</span>
-                    <input
-                      type="tel"
-                      name="celular"
-                      value={formValues.celular}
-                      onChange={handleInputChange}
-                      required
-                      placeholder="+51999999999"
-                      className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-cobalt"
-                    />
-                  </label>
+                      <label className="space-y-2">
+                        <span className="text-sm font-semibold text-slate-700">Correo</span>
+                        <input
+                          type="email"
+                          name="email"
+                          value={externalFormValues.email}
+                          onChange={handleExternalInputChange}
+                          required
+                          placeholder="participante@correo.com"
+                          className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-cobalt"
+                        />
+                      </label>
+                    </>
+                  ) : (
+                    <>
+                      <label className="space-y-2">
+                        <span className="text-sm font-semibold text-slate-700">Nombre</span>
+                        <input
+                          type="text"
+                          name="nombres"
+                          value={formValues.nombres}
+                          onChange={handleInputChange}
+                          required
+                          placeholder="Ingrese los nombres"
+                          className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-cobalt"
+                        />
+                      </label>
 
-                  <div className="grid gap-4 lg:col-span-3 lg:grid-cols-2">
-                    <label className="space-y-2">
-                      <span className="text-sm font-semibold text-slate-700">Direccion</span>
-                      <input
-                        type="text"
-                        name="direccion"
-                        value={formValues.direccion}
-                        onChange={handleInputChange}
-                        placeholder="Direccion del colegiado"
-                        className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-cobalt"
-                      />
-                    </label>
+                      <label className="space-y-2">
+                        <span className="text-sm font-semibold text-slate-700">
+                          Apellido paterno
+                        </span>
+                        <input
+                          type="text"
+                          name="apellidoPaterno"
+                          value={formValues.apellidoPaterno}
+                          onChange={handleInputChange}
+                          required
+                          placeholder="Apellido paterno"
+                          className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-cobalt"
+                        />
+                      </label>
 
-                    <label className="space-y-2">
-                      <span className="text-sm font-semibold text-slate-700">Email</span>
-                      <input
-                        type="email"
-                        name="email"
-                        value={formValues.email}
-                        onChange={handleInputChange}
-                        required
-                        placeholder="colegiado@correo.com"
-                        className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-cobalt"
-                      />
-                    </label>
-                  </div>
+                      <label className="space-y-2">
+                        <span className="text-sm font-semibold text-slate-700">
+                          Apellido materno
+                        </span>
+                        <input
+                          type="text"
+                          name="apellidoMaterno"
+                          value={formValues.apellidoMaterno}
+                          onChange={handleInputChange}
+                          required
+                          placeholder="Apellido materno"
+                          className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-cobalt"
+                        />
+                      </label>
+
+                      <label className="space-y-2">
+                        <span className="text-sm font-semibold text-slate-700">DNI</span>
+                        <input
+                          type="text"
+                          name="dni"
+                          value={formValues.dni}
+                          onChange={handleInputChange}
+                          required
+                          maxLength={8}
+                          placeholder="Ingrese el DNI"
+                          className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-cobalt"
+                        />
+                      </label>
+
+                      <label className="space-y-2">
+                        <span className="text-sm font-semibold text-slate-700">
+                          Fecha de nacimiento
+                        </span>
+                        <input
+                          type="date"
+                          name="fechaNacimiento"
+                          value={formValues.fechaNacimiento}
+                          onChange={handleInputChange}
+                          required
+                          className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-cobalt"
+                        />
+                      </label>
+
+                      <label className="space-y-2">
+                        <span className="text-sm font-semibold text-slate-700">
+                          Fecha de iniciacion
+                        </span>
+                        <input
+                          type="date"
+                          name="fechaIniciacion"
+                          value={formValues.fechaIniciacion}
+                          onChange={handleInputChange}
+                          required
+                          className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-cobalt"
+                        />
+                      </label>
+
+                      <label className="space-y-2">
+                        <span className="text-sm font-semibold text-slate-700">Sexo</span>
+                        <select
+                          name="sexo"
+                          value={formValues.sexo}
+                          onChange={handleInputChange}
+                          required
+                          className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-cobalt"
+                        >
+                          <option value="">Seleccione una opcion</option>
+                          <option value="Femenino">Femenino</option>
+                          <option value="Masculino">Masculino</option>
+                          <option value="Otro">Otro</option>
+                        </select>
+                      </label>
+
+                      <label className="space-y-2">
+                        <span className="text-sm font-semibold text-slate-700">
+                          RUC (opcional)
+                        </span>
+                        <input
+                          type="text"
+                          name="ruc"
+                          value={formValues.ruc}
+                          onChange={handleInputChange}
+                          placeholder="Ingrese su RUC si aplica"
+                          className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-cobalt"
+                        />
+                      </label>
+
+                      <label className="space-y-2">
+                        <span className="text-sm font-semibold text-slate-700">Celular</span>
+                        <input
+                          type="tel"
+                          name="celular"
+                          value={formValues.celular}
+                          onChange={handleInputChange}
+                          required
+                          placeholder="+51999999999"
+                          className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-cobalt"
+                        />
+                      </label>
+
+                      <label className="space-y-2 lg:col-span-1">
+                        <span className="text-sm font-semibold text-slate-700">Direccion</span>
+                        <input
+                          type="text"
+                          name="direccion"
+                          value={formValues.direccion}
+                          onChange={handleInputChange}
+                          placeholder="Direccion del colegiado"
+                          className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-cobalt"
+                        />
+                      </label>
+
+                      <label className="space-y-2 lg:col-span-2">
+                        <span className="text-sm font-semibold text-slate-700">Email</span>
+                        <input
+                          type="email"
+                          name="email"
+                          value={formValues.email}
+                          onChange={handleInputChange}
+                          required
+                          placeholder="colegiado@correo.com"
+                          className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-cobalt"
+                        />
+                      </label>
+                    </>
+                  )}
                 </div>
               </div>
 
@@ -1258,7 +1616,9 @@ function ColegiadosPage() {
                       : 'Registrando...'
                     : isEditMode
                       ? 'Guardar cambios'
-                      : 'Registrar colegiado'}
+                      : createTab === 'EXTERNO'
+                        ? 'Registrar externo'
+                        : 'Registrar colegiado'}
                 </button>
               </div>
             </form>
@@ -1359,13 +1719,17 @@ function ColegiadosPage() {
             <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-6 py-5 sm:px-8">
               <div>
                 <p className="text-xs font-bold uppercase tracking-[0.24em] text-cobalt">
-                  Detalle del colegiado
+                  {selectedColegiado.recordType === 'EXTERNO'
+                    ? 'Detalle del registro externo'
+                    : 'Detalle del colegiado'}
                 </p>
                 <h2 className="mt-2 text-2xl font-bold tracking-tight text-slate-950">
                   {selectedColegiado.name}
                 </h2>
                 <p className="mt-2 text-sm leading-6 text-slate-600">
-                  Consulta los datos completos registrados y las especialidades asignadas.
+                  {selectedColegiado.recordType === 'EXTERNO'
+                    ? 'Consulta los datos completos del perfil externo registrado.'
+                    : 'Consulta los datos completos registrados y las especialidades asignadas.'}
                 </p>
               </div>
 
@@ -1403,7 +1767,11 @@ function ColegiadosPage() {
                       >
                         {selectedColegiado.status}
                       </span>
-                      <p className="text-sm text-slate-500">{selectedColegiado.vigencia}</p>
+                      <p className="text-sm text-slate-500">
+                        {selectedColegiado.recordType === 'EXTERNO'
+                          ? selectedColegiado.tipoExterno
+                          : selectedColegiado.vigencia}
+                      </p>
                     </div>
                   </div>
                 </article>
@@ -1422,10 +1790,16 @@ function ColegiadosPage() {
 
                 <article className="rounded-[28px] border border-slate-200 bg-[#f8fbff] p-5">
                   <p className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">
-                    Especialidades
+                    {selectedColegiado.recordType === 'EXTERNO'
+                      ? 'Tipo de externo'
+                      : 'Especialidades'}
                   </p>
                   <div className="mt-4 flex flex-wrap gap-3">
-                    {selectedColegiado.especialidades.length > 0 ? (
+                    {selectedColegiado.recordType === 'EXTERNO' ? (
+                      <span className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-sky-700 shadow-[0_8px_18px_-14px_rgba(14,116,144,0.6)]">
+                        {selectedColegiado.tipoExterno}
+                      </span>
+                    ) : selectedColegiado.especialidades.length > 0 ? (
                       selectedColegiado.especialidades.map((especialidad) => (
                         <span
                           key={especialidad}
@@ -1446,7 +1820,9 @@ function ColegiadosPage() {
               <div className="grid gap-4 lg:grid-cols-3">
                 <article className="rounded-[24px] border border-slate-200 bg-[#f8fbff] p-4">
                   <p className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">
-                    Codigo de colegiatura
+                    {selectedColegiado.recordType === 'EXTERNO'
+                      ? 'Codigo de registro'
+                      : 'Codigo de colegiatura'}
                   </p>
                   <p className="mt-2 text-sm font-semibold text-slate-900">
                     {selectedColegiado.code}
@@ -1498,14 +1874,16 @@ function ColegiadosPage() {
                   </p>
                 </article>
 
-                <article className="rounded-[24px] border border-slate-200 bg-white p-4">
-                  <p className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">
-                    Fecha de iniciacion
-                  </p>
-                  <p className="mt-2 text-sm font-semibold text-slate-900">
-                    {formatDate(selectedColegiado.fechaIniciacion)}
-                  </p>
-                </article>
+                {selectedColegiado.recordType === 'COLEGIADO' ? (
+                  <article className="rounded-[24px] border border-slate-200 bg-white p-4">
+                    <p className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">
+                      Fecha de iniciacion
+                    </p>
+                    <p className="mt-2 text-sm font-semibold text-slate-900">
+                      {formatDate(selectedColegiado.fechaIniciacion)}
+                    </p>
+                  </article>
+                ) : null}
 
                 <article className="rounded-[24px] border border-slate-200 bg-white p-4">
                   <p className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">
@@ -1516,23 +1894,27 @@ function ColegiadosPage() {
                   </p>
                 </article>
 
-                <article className="rounded-[24px] border border-slate-200 bg-white p-4">
-                  <p className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">
-                    RUC
-                  </p>
-                  <p className="mt-2 text-sm font-semibold text-slate-900">
-                    {selectedColegiado.ruc}
-                  </p>
-                </article>
+                {selectedColegiado.recordType === 'COLEGIADO' ? (
+                  <>
+                    <article className="rounded-[24px] border border-slate-200 bg-white p-4">
+                      <p className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">
+                        RUC
+                      </p>
+                      <p className="mt-2 text-sm font-semibold text-slate-900">
+                        {selectedColegiado.ruc}
+                      </p>
+                    </article>
 
-                <article className="rounded-[24px] border border-slate-200 bg-white p-4 lg:col-span-1">
-                  <p className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">
-                    Direccion
-                  </p>
-                  <p className="mt-2 text-sm font-semibold text-slate-900">
-                    {selectedColegiado.direccion}
-                  </p>
-                </article>
+                    <article className="rounded-[24px] border border-slate-200 bg-white p-4 lg:col-span-1">
+                      <p className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">
+                        Direccion
+                      </p>
+                      <p className="mt-2 text-sm font-semibold text-slate-900">
+                        {selectedColegiado.direccion}
+                      </p>
+                    </article>
+                  </>
+                ) : null}
 
                 <article className="rounded-[24px] border border-slate-200 bg-white p-4 lg:col-span-1">
                   <p className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">
@@ -1548,6 +1930,7 @@ function ColegiadosPage() {
                 <button
                   type="button"
                   onClick={() => openEspecialidadesModal(selectedColegiado)}
+                  disabled={selectedColegiado.recordType === 'EXTERNO'}
                   className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-900"
                 >
                   Editar especialidades
@@ -1571,7 +1954,9 @@ function ColegiadosPage() {
             <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-6 py-5 sm:px-8">
               <div>
                 <p className="text-xs font-bold uppercase tracking-[0.24em] text-red-500">
-                  Eliminar colegiado
+                  {selectedColegiado.recordType === 'EXTERNO'
+                    ? 'Eliminar externo'
+                    : 'Eliminar colegiado'}
                 </p>
                 <h2 className="mt-2 text-2xl font-bold tracking-tight text-slate-950">
                   Confirmar eliminacion
@@ -1612,8 +1997,9 @@ function ColegiadosPage() {
               </div>
 
               <p className="text-sm leading-6 text-slate-500">
-                Si el colegiado ya tiene cobros registrados, el sistema bloqueara la eliminacion
-                para proteger el historial.
+                {selectedColegiado.recordType === 'EXTERNO'
+                  ? 'Si este perfil aun no se usa en otros modulos, se eliminara del padron.'
+                  : 'Si el colegiado ya tiene cobros registrados, el sistema bloqueara la eliminacion para proteger el historial.'}
               </p>
 
               <div className="flex flex-col-reverse gap-3 border-t border-slate-200 pt-5 sm:flex-row sm:justify-end">
@@ -1631,7 +2017,9 @@ function ColegiadosPage() {
                   className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[linear-gradient(135deg,#b91c1c_0%,#ef4444_100%)] px-5 py-3 text-sm font-semibold text-white shadow-[0_18px_34px_-24px_rgba(185,28,28,0.85)] transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-70"
                 >
                   <Trash2 size={16} strokeWidth={2.2} />
-                  {isDeleting ? 'Eliminando...' : 'Eliminar colegiado'}
+                  {isDeleting
+                    ? 'Eliminando...'
+                    : `Eliminar ${selectedColegiado.recordType === 'EXTERNO' ? 'externo' : 'colegiado'}`}
                 </button>
               </div>
             </div>

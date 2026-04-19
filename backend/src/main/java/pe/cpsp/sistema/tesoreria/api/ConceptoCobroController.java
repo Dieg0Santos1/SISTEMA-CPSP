@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import pe.cpsp.sistema.tesoreria.api.dto.ConceptoCobroCatalogoResponse;
+import pe.cpsp.sistema.tesoreria.api.dto.ConceptoCobroDeleteResponse;
 import pe.cpsp.sistema.tesoreria.api.dto.ConceptoCobroResponse;
 import pe.cpsp.sistema.tesoreria.api.dto.ConceptoCobroUpsertRequest;
 import pe.cpsp.sistema.tesoreria.application.ConceptoCobroAdminService;
@@ -56,8 +57,7 @@ public class ConceptoCobroController {
   }
 
   @DeleteMapping("/{conceptoId}")
-  @ResponseStatus(HttpStatus.NO_CONTENT)
-  public void deleteConceptoCobro(@PathVariable Long conceptoId) {
-    conceptoCobroAdminService.eliminar(conceptoId);
+  public ConceptoCobroDeleteResponse deleteConceptoCobro(@PathVariable Long conceptoId) {
+    return conceptoCobroAdminService.eliminar(conceptoId);
   }
 }

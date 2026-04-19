@@ -20,11 +20,13 @@ import org.springframework.transaction.annotation.Transactional;
 import pe.cpsp.sistema.colegiados.domain.model.Colegiado;
 import pe.cpsp.sistema.colegiados.infrastructure.persistence.repository.ColegiadoRepository;
 import pe.cpsp.sistema.common.exception.InvalidRequestException;
+import pe.cpsp.sistema.tesoreria.api.dto.ConceptoCobroDeleteResponse;
 import pe.cpsp.sistema.tesoreria.api.dto.ConceptoCobroCatalogoResponse;
 import pe.cpsp.sistema.tesoreria.api.dto.CobranzaColegiadoDetailResponse;
 import pe.cpsp.sistema.tesoreria.api.dto.ConceptoCobroResponse;
 import pe.cpsp.sistema.tesoreria.api.dto.ConceptoCobroUpsertRequest;
 import pe.cpsp.sistema.tesoreria.api.dto.CrearFraccionamientoRequest;
+import pe.cpsp.sistema.tesoreria.api.dto.FraccionamientosPageResponse;
 import pe.cpsp.sistema.tesoreria.api.dto.RegistrarCobroItemRequest;
 import pe.cpsp.sistema.tesoreria.api.dto.RegistrarCobroRequest;
 import pe.cpsp.sistema.tesoreria.api.dto.RegistrarCobroResponse;
@@ -92,11 +94,108 @@ class TesoreriaCobroIntegrationTests {
     assertThat(detail.habilitadoHasta()).isEqualTo(LocalDate.of(2026, 7, 13));
     assertThat(detail.estado()).isEqualTo("NO_HABILITADO");
     assertThat(detail.periodosMensuales()).isNotEmpty();
-    assertThat(detail.periodosMensuales().get(0).periodo()).isEqualTo("2026-04");
-    assertThat(detail.periodosMensuales().get(0).status()).isEqualTo("PAID");
-    assertThat(detail.periodosMensuales()).hasSize(9);
+    assertThat(detail.periodosMensuales().get(0).periodo()).isEqualTo("2026-01");
+    assertThat(detail.periodosMensuales().get(0).status()).isEqualTo("NOT_APPLICABLE");
+    assertThat(detail.periodosMensuales()).hasSize(36);
+    assertThat(detail.periodosMensuales())
+        .anySatisfy(periodo -> {
+          assertThat(periodo.periodo()).isEqualTo("2026-04");
+          assertThat(periodo.status()).isEqualTo("PAID");
+          assertThat(periodo.selectable()).isFalse();
+        });
+    assertThat(detail.periodosMensuales())
+        .anySatisfy(periodo -> {
+          assertThat(periodo.periodo()).isEqualTo("2028-12");
+          assertThat(periodo.status()).isEqualTo("UPCOMING");
+          assertThat(periodo.selectable()).isTrue();
+        });
     assertThat(detail.periodosPendientesCount()).isEqualTo(4);
     assertThat(detail.saldoPendienteTotal()).isEqualByComparingTo("160.00");
+  }
+
+  @Test
+  void canRegisterAdvanceMonthlyPaymentsIntoNextYear() {
+    Colegiado colegiado = saveColegiado("99000010", "CPL-99010", "20188999001");
+    Long ceremoniaConceptId = findConceptId("CER-JUR");
+    Long mensualConceptId = findConceptId("APO-MEN");
+
+    tesoreriaCobroService.registrarCobro(
+        new RegistrarCobroRequest(
+            colegiado.getId(),
+            "BOLETA",
+            LocalDate.of(2026, 4, 13),
+            "EFECTIVO",
+            "Ceremonia",
+            List.of(
+                new RegistrarCobroItemRequest(
+                    ceremoniaConceptId, null, null, 1, BigDecimal.ZERO, BigDecimal.ZERO))));
+
+    RegistrarCobroResponse response =
+        tesoreriaCobroService.registrarCobro(
+            new RegistrarCobroRequest(
+                colegiado.getId(),
+                "BOLETA",
+                LocalDate.of(2026, 8, 20),
+                "TRANSFERENCIA",
+                "Pago adelantado de 12 meses",
+                List.of(
+                    new RegistrarCobroItemRequest(
+                        mensualConceptId, null, "2026-05", 1, BigDecimal.ZERO, BigDecimal.ZERO),
+                    new RegistrarCobroItemRequest(
+                        mensualConceptId, null, "2026-06", 1, BigDecimal.ZERO, BigDecimal.ZERO),
+                    new RegistrarCobroItemRequest(
+                        mensualConceptId, null, "2026-07", 1, BigDecimal.ZERO, BigDecimal.ZERO),
+                    new RegistrarCobroItemRequest(
+                        mensualConceptId, null, "2026-08", 1, BigDecimal.ZERO, BigDecimal.ZERO),
+                    new RegistrarCobroItemRequest(
+                        mensualConceptId, null, "2026-09", 1, BigDecimal.ZERO, BigDecimal.ZERO),
+                    new RegistrarCobroItemRequest(
+                        mensualConceptId, null, "2026-10", 1, BigDecimal.ZERO, BigDecimal.ZERO),
+                    new RegistrarCobroItemRequest(
+                        mensualConceptId, null, "2026-11", 1, BigDecimal.ZERO, BigDecimal.ZERO),
+                    new RegistrarCobroItemRequest(
+                        mensualConceptId, null, "2026-12", 1, BigDecimal.ZERO, BigDecimal.ZERO),
+                    new RegistrarCobroItemRequest(
+                        mensualConceptId, null, "2027-01", 1, BigDecimal.ZERO, BigDecimal.ZERO),
+                    new RegistrarCobroItemRequest(
+                        mensualConceptId, null, "2027-02", 1, BigDecimal.ZERO, BigDecimal.ZERO),
+                    new RegistrarCobroItemRequest(
+                        mensualConceptId, null, "2027-03", 1, BigDecimal.ZERO, BigDecimal.ZERO),
+                    new RegistrarCobroItemRequest(
+                        mensualConceptId, null, "2027-04", 1, BigDecimal.ZERO, BigDecimal.ZERO))));
+
+    CobranzaColegiadoDetailResponse detail =
+        tesoreriaQueryService.getColegiadoCobranza(colegiado.getId());
+
+    assertThat(response.items()).hasSize(12);
+    assertThat(response.total()).isEqualByComparingTo("480.00");
+    assertThat(response.items()).anyMatch(item -> "2027-04".equals(item.periodoReferencia()));
+    assertThat(detail.ultimoPeriodoPagado()).isEqualTo("2027-04");
+  }
+
+  @Test
+  void timelineDoesNotExposeYearsBeforeCeremonyYear() {
+    Colegiado colegiado = saveColegiado("99000011", "CPL-99011", "20199000112");
+    Long ceremoniaConceptId = findConceptId("CER-JUR");
+
+    tesoreriaCobroService.registrarCobro(
+        new RegistrarCobroRequest(
+            colegiado.getId(),
+            "BOLETA",
+            LocalDate.of(2024, 3, 10),
+            "EFECTIVO",
+            "Ceremonia",
+            List.of(
+                new RegistrarCobroItemRequest(
+                    ceremoniaConceptId, null, null, 1, BigDecimal.ZERO, BigDecimal.ZERO))));
+
+    CobranzaColegiadoDetailResponse detail =
+        tesoreriaQueryService.getColegiadoCobranza(colegiado.getId());
+
+    assertThat(detail.periodosMensuales()).isNotEmpty();
+    assertThat(detail.periodosMensuales().get(0).periodo()).isEqualTo("2024-01");
+    assertThat(detail.periodosMensuales())
+        .noneMatch(periodo -> periodo.periodo().startsWith("2023-"));
   }
 
   @Test
@@ -271,6 +370,44 @@ class TesoreriaCobroIntegrationTests {
   }
 
   @Test
+  void fraccionamientosPageReturnsSummaryAndRowsForDashboard() {
+    Colegiado colegiado = saveColegiado("99000012", "CPL-99012", "20112344321");
+    Long ceremoniaConceptId = findConceptId("CER-JUR");
+
+    tesoreriaCobroService.registrarCobro(
+        new RegistrarCobroRequest(
+            colegiado.getId(),
+            "BOLETA",
+            LocalDate.of(2026, 4, 13),
+            "EFECTIVO",
+            "Ceremonia",
+            List.of(
+                new RegistrarCobroItemRequest(
+                    ceremoniaConceptId, null, null, 1, BigDecimal.ZERO, BigDecimal.ZERO))));
+
+    var detail =
+        tesoreriaFraccionamientoService.crear(
+            colegiado.getId(),
+            new CrearFraccionamientoRequest(LocalDate.of(2026, 8, 20), 4, "Convenio dashboard"));
+
+    FraccionamientosPageResponse response = tesoreriaQueryService.getFraccionamientos("", 1, 10);
+    var detallePanel = tesoreriaQueryService.getFraccionamientoDetail(detail.id());
+
+    assertThat(response.totalFraccionamientos()).isPositive();
+    assertThat(response.conveniosActivos()).isPositive();
+    assertThat(response.montoTotalRefinanciado()).isGreaterThan(BigDecimal.ZERO);
+    assertThat(response.rows().content())
+        .anySatisfy(
+            row -> {
+              assertThat(row.codigoColegiatura()).isEqualTo("CPL-99012");
+              assertThat(row.cuotaActual()).isEqualTo("Cuota 1/4");
+              assertThat(row.proximoPago()).isEqualTo(LocalDate.of(2026, 8, 20));
+            });
+    assertThat(detallePanel.codigoColegiatura()).isEqualTo("CPL-99012");
+    assertThat(detallePanel.detalle().numeroCuotas()).isEqualTo(4);
+  }
+
+  @Test
   void facturaRequiresRegisteredRuc() {
     Colegiado colegiado = saveColegiado("99000004", "CPL-99004", null);
     Long fedateoConceptId = findConceptId("FED-DOC");
@@ -388,10 +525,14 @@ class TesoreriaCobroIntegrationTests {
         conceptoCobroAdminService.crear(
             new ConceptoCobroUpsertRequest(
                 "SER-TEST",
+                "NORMAL",
                 "Servicio de prueba",
                 "Servicios",
                 "Concepto temporal para pruebas",
                 new BigDecimal("55.00"),
+                null,
+                null,
+                null,
                 false,
                 true,
                 true,
@@ -409,10 +550,14 @@ class TesoreriaCobroIntegrationTests {
             created.id(),
             new ConceptoCobroUpsertRequest(
                 "SER-TEST",
+                "NORMAL",
                 "Servicio de prueba editado",
                 "Certificaciones",
                 "Concepto actualizado",
                 new BigDecimal("65.50"),
+                null,
+                null,
+                null,
                 false,
                 true,
                 false,
@@ -427,17 +572,113 @@ class TesoreriaCobroIntegrationTests {
     assertThat(updated.exoneradoIgv()).isTrue();
     assertThat(updated.estado()).isEqualTo("INACTIVO");
 
-    conceptoCobroAdminService.eliminar(created.id());
+    ConceptoCobroDeleteResponse deleteResponse = conceptoCobroAdminService.eliminar(created.id());
+
+    assertThat(deleteResponse.resultado()).isEqualTo("ELIMINADO");
 
     assertThat(tesoreriaQueryService.getConceptosCobroCatalogo().conceptos())
         .noneMatch(concepto -> created.id().equals(concepto.id()));
   }
 
   @Test
+  void createDiscountConceptPersistsSpecificConfiguration() {
+    ConceptoCobroResponse created =
+        conceptoCobroAdminService.crear(
+            new ConceptoCobroUpsertRequest(
+                "DSC-APO",
+                "DESCUENTO",
+                "Descuento por pronto pago",
+                null,
+                "Se aplica al pagar varias aportaciones juntas",
+                null,
+                "PORCENTAJE",
+                new BigDecimal("10.00"),
+                "APORTACIONES",
+                false,
+                false,
+                false,
+                false,
+                false,
+                false,
+                false,
+                "ACTIVO"));
+
+    assertThat(created.tipoConcepto()).isEqualTo("DESCUENTO");
+    assertThat(created.categoria()).isEqualTo("DESCUENTOS");
+    assertThat(created.tipoDescuento()).isEqualTo("PORCENTAJE");
+    assertThat(created.valorDescuento()).isEqualByComparingTo("10.00");
+    assertThat(created.aplicaDescuentoA()).isEqualTo("APORTACIONES");
+    assertThat(tesoreriaQueryService.listConceptosCobro())
+        .anyMatch(concepto -> "DSC-APO".equals(concepto.codigo()));
+    assertThat(tesoreriaQueryService.getConceptosCobroCatalogo().descuentosConfigurados())
+        .isPositive();
+  }
+
+  @Test
+  void registeringDiscountConceptAppliesNegativeLineToReceipt() {
+    Colegiado colegiado = saveColegiado("99000013", "CPL-99013", "20177444111");
+
+    ConceptoCobroResponse discountConcept =
+        conceptoCobroAdminService.crear(
+            new ConceptoCobroUpsertRequest(
+                "DSC-FIX",
+                "DESCUENTO",
+                "Descuento promocional",
+                null,
+                "Monto fijo de prueba",
+                null,
+                "MONTO_FIJO",
+                new BigDecimal("5.00"),
+                "TODOS_LOS_CONCEPTOS",
+                false,
+                false,
+                false,
+                false,
+                false,
+                false,
+                false,
+                "ACTIVO"));
+
+    Long fedateoConceptId = findConceptId("FED-DOC");
+
+    RegistrarCobroResponse response =
+        tesoreriaCobroService.registrarCobro(
+            new RegistrarCobroRequest(
+                colegiado.getId(),
+                "BOLETA",
+                LocalDate.of(2026, 8, 20),
+                "EFECTIVO",
+                "Fedateo con descuento",
+                List.of(
+                    new RegistrarCobroItemRequest(
+                        fedateoConceptId, null, null, 1, BigDecimal.ZERO, BigDecimal.ZERO),
+                    new RegistrarCobroItemRequest(
+                        discountConcept.id(),
+                        null,
+                        "S/ 5.00 sobre todos los conceptos",
+                        1,
+                        new BigDecimal("5.00"),
+                        BigDecimal.ZERO))));
+
+    assertThat(response.subtotal()).isEqualByComparingTo("12.00");
+    assertThat(response.descuentoTotal()).isEqualByComparingTo("5.00");
+    assertThat(response.total()).isEqualByComparingTo("7.00");
+    assertThat(response.items())
+        .anySatisfy(
+            item -> {
+              assertThat(item.codigoConcepto()).isEqualTo("DSC-FIX");
+              assertThat(item.totalLinea()).isEqualByComparingTo("-5.00");
+            });
+  }
+
+  @Test
   void deletingReferencedConceptMarksItInactive() {
     Long ceremonyConceptId = findConceptId("CER-JUR");
 
-    conceptoCobroAdminService.eliminar(ceremonyConceptId);
+    ConceptoCobroDeleteResponse deleteResponse =
+        conceptoCobroAdminService.eliminar(ceremonyConceptId);
+
+    assertThat(deleteResponse.resultado()).isEqualTo("INACTIVADO");
 
     ConceptoCobroResponse concepto =
         tesoreriaQueryService.getConceptosCobroCatalogo().conceptos().stream()

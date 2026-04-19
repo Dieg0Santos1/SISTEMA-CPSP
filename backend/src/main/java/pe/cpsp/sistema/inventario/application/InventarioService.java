@@ -1,7 +1,14 @@
 package pe.cpsp.sistema.inventario.application;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
@@ -9,22 +16,37 @@ import org.springframework.transaction.annotation.Transactional;
 import pe.cpsp.sistema.colegiados.api.dto.ColegiadoResponse;
 import pe.cpsp.sistema.colegiados.application.ColegiadoService;
 import pe.cpsp.sistema.colegiados.domain.model.Colegiado;
+import pe.cpsp.sistema.colegiados.domain.model.PersonaExterna;
 import pe.cpsp.sistema.colegiados.infrastructure.persistence.repository.ColegiadoRepository;
+import pe.cpsp.sistema.colegiados.infrastructure.persistence.repository.PersonaExternaRepository;
 import pe.cpsp.sistema.common.exception.DuplicateResourceException;
 import pe.cpsp.sistema.common.exception.InvalidRequestException;
 import pe.cpsp.sistema.common.exception.ResourceNotFoundException;
+import pe.cpsp.sistema.inventario.api.dto.InventarioClienteVentaResponse;
 import pe.cpsp.sistema.inventario.api.dto.InventarioDashboardResponse;
 import pe.cpsp.sistema.inventario.api.dto.InventarioEntregaMemberResponse;
 import pe.cpsp.sistema.inventario.api.dto.InventarioMovimientoResponse;
 import pe.cpsp.sistema.inventario.api.dto.InventarioProductoCreateRequest;
 import pe.cpsp.sistema.inventario.api.dto.InventarioProductoDetailResponse;
 import pe.cpsp.sistema.inventario.api.dto.InventarioProductoListItemResponse;
+import pe.cpsp.sistema.inventario.api.dto.InventarioRegistrarVentaItemRequest;
+import pe.cpsp.sistema.inventario.api.dto.InventarioRegistrarVentaRequest;
+import pe.cpsp.sistema.inventario.api.dto.InventarioVentaItemResponse;
+import pe.cpsp.sistema.inventario.api.dto.InventarioVentaListItemResponse;
+import pe.cpsp.sistema.inventario.api.dto.InventarioVentaResponse;
+import pe.cpsp.sistema.inventario.api.dto.InventarioVentasPanelResponse;
 import pe.cpsp.sistema.inventario.domain.model.InventarioEntrega;
 import pe.cpsp.sistema.inventario.domain.model.InventarioMovimiento;
 import pe.cpsp.sistema.inventario.domain.model.InventarioProducto;
+import pe.cpsp.sistema.inventario.domain.model.InventarioVenta;
+import pe.cpsp.sistema.inventario.domain.model.InventarioVentaDetalle;
 import pe.cpsp.sistema.inventario.infrastructure.persistence.repository.InventarioEntregaRepository;
 import pe.cpsp.sistema.inventario.infrastructure.persistence.repository.InventarioMovimientoRepository;
 import pe.cpsp.sistema.inventario.infrastructure.persistence.repository.InventarioProductoRepository;
+import pe.cpsp.sistema.inventario.infrastructure.persistence.repository.InventarioVentaRepository;
+import pe.cpsp.sistema.tesoreria.domain.model.ComprobanteSerie;
+import pe.cpsp.sistema.tesoreria.domain.model.TipoComprobante;
+import pe.cpsp.sistema.tesoreria.infrastructure.persistence.repository.ComprobanteSerieRepository;
 
 @Service
 @Transactional
@@ -32,24 +54,35 @@ public class InventarioService {
 
   private static final String ESTADO_HABILITADO = "HABILITADO";
   private static final String TIPO_VENTA = "VENTA";
+  private static final String CLIENTE_TIPO_COLEGIADO = "COLEGIADO";
+  private static final String CLIENTE_TIPO_EXTERNO = "EXTERNO";
 
   private final InventarioProductoRepository inventarioProductoRepository;
   private final InventarioEntregaRepository inventarioEntregaRepository;
   private final InventarioMovimientoRepository inventarioMovimientoRepository;
+  private final InventarioVentaRepository inventarioVentaRepository;
   private final ColegiadoRepository colegiadoRepository;
+  private final PersonaExternaRepository personaExternaRepository;
   private final ColegiadoService colegiadoService;
+  private final ComprobanteSerieRepository comprobanteSerieRepository;
 
   public InventarioService(
       InventarioProductoRepository inventarioProductoRepository,
       InventarioEntregaRepository inventarioEntregaRepository,
       InventarioMovimientoRepository inventarioMovimientoRepository,
+      InventarioVentaRepository inventarioVentaRepository,
       ColegiadoRepository colegiadoRepository,
-      ColegiadoService colegiadoService) {
+      PersonaExternaRepository personaExternaRepository,
+      ColegiadoService colegiadoService,
+      ComprobanteSerieRepository comprobanteSerieRepository) {
     this.inventarioProductoRepository = inventarioProductoRepository;
     this.inventarioEntregaRepository = inventarioEntregaRepository;
     this.inventarioMovimientoRepository = inventarioMovimientoRepository;
+    this.inventarioVentaRepository = inventarioVentaRepository;
     this.colegiadoRepository = colegiadoRepository;
+    this.personaExternaRepository = personaExternaRepository;
     this.colegiadoService = colegiadoService;
+    this.comprobanteSerieRepository = comprobanteSerieRepository;
   }
 
   @Transactional(readOnly = true)
@@ -71,6 +104,65 @@ public class InventarioService {
   public InventarioProductoDetailResponse getProductoDetail(Long productoId) {
     InventarioProducto producto = findProducto(productoId);
     return toDetail(producto);
+  }
+
+  @Transactional(readOnly = true)
+  public List<InventarioClienteVentaResponse> listClientesVenta() {
+    List<InventarioClienteVentaResponse> clientes = new ArrayList<>();
+
+    clientes.addAll(
+        colegiadoService.listAll().stream()
+            .map(
+                colegiado ->
+                    new InventarioClienteVentaResponse(
+                        colegiado.id(),
+                        CLIENTE_TIPO_COLEGIADO,
+                        colegiado.codigoColegiatura(),
+                        colegiado.nombreCompleto(),
+                        colegiado.dni(),
+                        "Colegiado " + formatEstadoLabel(colegiado.estado())))
+            .toList());
+
+    clientes.addAll(
+        personaExternaRepository.findAllByOrderByApellidoPaternoAscApellidoMaternoAscNombreAsc().stream()
+            .map(
+                externo ->
+                    new InventarioClienteVentaResponse(
+                        externo.getId(),
+                        CLIENTE_TIPO_EXTERNO,
+                        externo.getCodigoExterno(),
+                        buildNombreCompleto(externo),
+                        externo.getDni(),
+                        externo.getTipoExterno()))
+            .toList());
+
+    return clientes.stream()
+        .sorted(Comparator.comparing(InventarioClienteVentaResponse::nombreCompleto))
+        .toList();
+  }
+
+  @Transactional(readOnly = true)
+  public InventarioVentasPanelResponse getVentasPanel() {
+    List<InventarioVenta> ventas = inventarioVentaRepository.findAllByOrderByFechaVentaDescIdDesc();
+
+    BigDecimal montoRecaudado =
+        ventas.stream().map(InventarioVenta::getTotal).reduce(BigDecimal.ZERO, BigDecimal::add);
+    long unidadesVendidas =
+        ventas.stream()
+            .flatMap(venta -> venta.getDetalles().stream())
+            .mapToLong(InventarioVentaDetalle::getCantidad)
+            .sum();
+    BigDecimal ticketPromedio =
+        ventas.isEmpty()
+            ? BigDecimal.ZERO
+            : montoRecaudado.divide(BigDecimal.valueOf(ventas.size()), 2, RoundingMode.HALF_UP);
+
+    return new InventarioVentasPanelResponse(
+        ventas.size(),
+        unidadesVendidas,
+        montoRecaudado,
+        ticketPromedio,
+        ventas.stream().map(this::toVentaListItem).toList());
   }
 
   public InventarioProductoListItemResponse crearProducto(InventarioProductoCreateRequest request) {
@@ -103,6 +195,76 @@ public class InventarioService {
     }
 
     return toListItem(savedProduct);
+  }
+
+  public InventarioVentaResponse registrarVenta(InventarioRegistrarVentaRequest request) {
+    ClienteVentaSnapshot cliente = resolveCliente(request.clienteTipo(), request.clienteId());
+    String metodoPago = normalizeMetodoPago(request.metodoPago());
+    ComprobanteSerie serie =
+        comprobanteSerieRepository
+            .findByTipoAndActivaTrue(TipoComprobante.BOLETA)
+            .orElseThrow(() -> new ResourceNotFoundException("No existe una serie activa para boleta."));
+
+    validateVentaItems(request.items());
+
+    Map<Long, InventarioProducto> productosPorId = new HashMap<>();
+    for (InventarioRegistrarVentaItemRequest item : request.items()) {
+      InventarioProducto producto = findProducto(item.productoId());
+      productosPorId.put(producto.getId(), producto);
+    }
+
+    for (InventarioRegistrarVentaItemRequest item : request.items()) {
+      InventarioProducto producto = productosPorId.get(item.productoId());
+      if (producto.getStockActual() < item.cantidad()) {
+        throw new InvalidRequestException(
+            "No hay stock suficiente para vender " + producto.getNombre() + ".");
+      }
+    }
+
+    InventarioVenta venta = new InventarioVenta();
+    venta.setSerie(serie.getSerie());
+    venta.setNumeroComprobante(serie.getCorrelativoActual() + 1);
+    venta.setReferencia(buildVentaReference(venta.getSerie(), venta.getNumeroComprobante()));
+    venta.setClienteTipo(cliente.tipo());
+    venta.setClienteReferenciaId(cliente.id());
+    venta.setClienteCodigo(cliente.codigo());
+    venta.setClienteNombre(cliente.nombre());
+    venta.setClienteDocumento(cliente.documento());
+    venta.setClienteDetalle(cliente.detalle());
+    venta.setMetodoPago(metodoPago);
+    venta.setFechaVenta(request.fechaVenta());
+    venta.setObservacion(cleanNullable(request.observacion()));
+
+    BigDecimal total = BigDecimal.ZERO;
+    List<InventarioVentaDetalle> detalles = new ArrayList<>();
+    for (InventarioRegistrarVentaItemRequest item : request.items()) {
+      InventarioProducto producto = productosPorId.get(item.productoId());
+      BigDecimal precioUnitario = producto.getPrecioReferencia();
+      BigDecimal totalLinea = precioUnitario.multiply(BigDecimal.valueOf(item.cantidad()));
+
+      InventarioVentaDetalle detalle = new InventarioVentaDetalle();
+      detalle.setVenta(venta);
+      detalle.setProducto(producto);
+      detalle.setCantidad(item.cantidad());
+      detalle.setPrecioUnitario(precioUnitario);
+      detalle.setTotalLinea(totalLinea);
+      detalles.add(detalle);
+
+      producto.setStockActual(producto.getStockActual() - item.cantidad());
+      inventarioProductoRepository.save(producto);
+      registrarMovimiento(producto, TIPO_VENTA, "Venta a " + cliente.nombre(), -item.cantidad());
+
+      total = total.add(totalLinea);
+    }
+
+    venta.setDetalles(detalles);
+    venta.setTotal(total);
+
+    InventarioVenta savedVenta = inventarioVentaRepository.save(venta);
+    serie.setCorrelativoActual(savedVenta.getNumeroComprobante());
+    comprobanteSerieRepository.save(serie);
+
+    return toVentaResponse(savedVenta);
   }
 
   public InventarioProductoDetailResponse registrarEntrega(Long productoId, Long colegiadoId) {
@@ -163,6 +325,47 @@ public class InventarioService {
     return getProductoDetail(productoId);
   }
 
+  private void validateVentaItems(List<InventarioRegistrarVentaItemRequest> items) {
+    Set<Long> productos = new HashSet<>();
+    for (InventarioRegistrarVentaItemRequest item : items) {
+      if (!productos.add(item.productoId())) {
+        throw new InvalidRequestException("No se puede repetir el mismo producto en una venta.");
+      }
+    }
+  }
+
+  private ClienteVentaSnapshot resolveCliente(String clienteTipo, Long clienteId) {
+    String normalizedType = clean(clienteTipo).toUpperCase();
+
+    if (CLIENTE_TIPO_COLEGIADO.equals(normalizedType)) {
+      ColegiadoResponse colegiado = colegiadoService.getById(clienteId);
+      return new ClienteVentaSnapshot(
+          CLIENTE_TIPO_COLEGIADO,
+          colegiado.id(),
+          colegiado.codigoColegiatura(),
+          colegiado.nombreCompleto(),
+          colegiado.dni(),
+          "Colegiado " + formatEstadoLabel(colegiado.estado()));
+    }
+
+    if (CLIENTE_TIPO_EXTERNO.equals(normalizedType)) {
+      PersonaExterna externo =
+          personaExternaRepository
+              .findById(clienteId)
+              .orElseThrow(
+                  () -> new ResourceNotFoundException("No existe el externo solicitado."));
+      return new ClienteVentaSnapshot(
+          CLIENTE_TIPO_EXTERNO,
+          externo.getId(),
+          externo.getCodigoExterno(),
+          buildNombreCompleto(externo),
+          externo.getDni(),
+          externo.getTipoExterno());
+    }
+
+    throw new InvalidRequestException("Tipo de cliente no valido para la venta.");
+  }
+
   private InventarioProducto findProducto(Long productoId) {
     return inventarioProductoRepository
         .findByIdAndActivoTrue(productoId)
@@ -181,6 +384,15 @@ public class InventarioService {
             colegiado.getNombre(),
             colegiado.getApellidoPaterno(),
             colegiado.getApellidoMaterno())
+        .trim();
+  }
+
+  private String buildNombreCompleto(PersonaExterna personaExterna) {
+    return String.join(
+            " ",
+            clean(personaExterna.getNombre()),
+            clean(personaExterna.getApellidoPaterno()),
+            clean(personaExterna.getApellidoMaterno()))
         .trim();
   }
 
@@ -258,4 +470,101 @@ public class InventarioService {
         movimiento.getCantidad(),
         movimiento.getFechaMovimiento());
   }
+
+  private InventarioVentaResponse toVentaResponse(InventarioVenta venta) {
+    return new InventarioVentaResponse(
+        venta.getId(),
+        venta.getReferencia(),
+        TipoComprobante.BOLETA.name(),
+        venta.getSerie(),
+        venta.getNumeroComprobante(),
+        venta.getClienteTipo(),
+        venta.getClienteCodigo(),
+        venta.getClienteNombre(),
+        venta.getClienteDocumento(),
+        venta.getClienteDetalle(),
+        venta.getMetodoPago(),
+        venta.getFechaVenta(),
+        venta.getObservacion(),
+        venta.getTotal(),
+        venta.getDetalles().stream()
+            .map(
+                detalle ->
+                    new InventarioVentaItemResponse(
+                        detalle.getProducto().getId(),
+                        detalle.getProducto().getCodigo(),
+                        detalle.getProducto().getNombre(),
+                        detalle.getCantidad(),
+                        detalle.getPrecioUnitario(),
+                        detalle.getTotalLinea()))
+            .toList());
+  }
+
+  private InventarioVentaListItemResponse toVentaListItem(InventarioVenta venta) {
+    int totalUnidades =
+        venta.getDetalles().stream().mapToInt(InventarioVentaDetalle::getCantidad).sum();
+
+    return new InventarioVentaListItemResponse(
+        venta.getId(),
+        venta.getReferencia(),
+        venta.getClienteTipo(),
+        venta.getClienteCodigo(),
+        venta.getClienteNombre(),
+        venta.getClienteDetalle(),
+        buildResumenItems(venta),
+        totalUnidades,
+        venta.getMetodoPago(),
+        venta.getFechaVenta(),
+        venta.getTotal());
+  }
+
+  private String buildResumenItems(InventarioVenta venta) {
+    List<String> nombres =
+        venta.getDetalles().stream().map(detalle -> detalle.getProducto().getNombre()).distinct().toList();
+
+    if (nombres.isEmpty()) {
+      return "Sin items";
+    }
+
+    if (nombres.size() == 1) {
+      return nombres.get(0);
+    }
+
+    return nombres.get(0) + " +" + (nombres.size() - 1) + " item(s)";
+  }
+
+  private String buildVentaReference(String serie, Long numeroComprobante) {
+    return serie + "-" + String.format("%07d", numeroComprobante);
+  }
+
+  private String formatEstadoLabel(String estado) {
+    return ESTADO_HABILITADO.equalsIgnoreCase(clean(estado)) ? "habilitado" : "no habilitado";
+  }
+
+  private String normalizeMetodoPago(String value) {
+    return switch (clean(value).toUpperCase()) {
+      case "EFECTIVO" -> "Efectivo";
+      case "YAPE/PLIN", "YAPE_PLIN" -> "Yape/Plin";
+      case "TRANSFERENCIA" -> "Transferencia";
+      case "POS/TARJETA", "POS_TARJETA" -> "POS/Tarjeta";
+      default -> throw new InvalidRequestException("Metodo de pago no valido para la venta.");
+    };
+  }
+
+  private String clean(String value) {
+    return value == null ? "" : value.trim();
+  }
+
+  private String cleanNullable(String value) {
+    String cleaned = clean(value);
+    return cleaned.isBlank() ? null : cleaned;
+  }
+
+  private record ClienteVentaSnapshot(
+      String tipo,
+      Long id,
+      String codigo,
+      String nombre,
+      String documento,
+      String detalle) {}
 }

@@ -24,6 +24,22 @@ const categoryOptions = [
   { value: 'SERVICIOS', label: 'Servicios' },
   { value: 'CERTIFICACIONES', label: 'Certificaciones' },
   { value: 'ESPECIALIDADES', label: 'Especialidades' },
+  { value: 'DESCUENTOS', label: 'Descuentos' },
+]
+
+const conceptTypeOptions = [
+  { value: 'NORMAL', label: 'Concepto normal' },
+  { value: 'DESCUENTO', label: 'Descuento' },
+]
+
+const discountTypeOptions = [
+  { value: 'MONTO_FIJO', label: 'Monto fijo' },
+  { value: 'PORCENTAJE', label: 'Porcentaje' },
+]
+
+const discountApplyOptions = [
+  { value: 'APORTACIONES', label: 'Aportaciones' },
+  { value: 'TODOS_LOS_CONCEPTOS', label: 'Todos los conceptos' },
 ]
 
 const estadoOptions = [
@@ -33,10 +49,14 @@ const estadoOptions = [
 
 const initialFormValues = {
   codigo: '',
+  tipoConcepto: 'NORMAL',
   nombre: '',
   categoria: 'SERVICIOS',
   descripcion: '',
   montoBase: '',
+  tipoDescuento: 'MONTO_FIJO',
+  valorDescuento: '',
+  aplicaDescuentoA: 'APORTACIONES',
   usaPeriodo: false,
   permiteCantidad: false,
   admiteDescuento: false,
@@ -46,6 +66,9 @@ const initialFormValues = {
   requiereAdjunto: false,
   estado: 'ACTIVO',
 }
+
+const conceptosSyncEventName = 'tesoreria:conceptos-updated'
+const conceptosSyncStorageKey = 'tesoreria:conceptos-updated-at'
 
 function formatCurrency(value) {
   return new Intl.NumberFormat('es-PE', {
@@ -62,14 +85,43 @@ function formatCategoryLabel(value) {
   )
 }
 
+function formatConceptTypeLabel(value) {
+  return value === 'DESCUENTO' ? 'Descuento' : 'Concepto normal'
+}
+
 function formatStatusLabel(value) {
   return value === 'ACTIVO' ? 'Activo' : 'Inactivo'
+}
+
+function formatDiscountTypeLabel(value) {
+  return discountTypeOptions.find((option) => option.value === value)?.label ?? value
+}
+
+function formatDiscountApplyLabel(value) {
+  return discountApplyOptions.find((option) => option.value === value)?.label ?? value
+}
+
+function formatConceptAmount(concept) {
+  if (concept.tipoConcepto === 'DESCUENTO') {
+    if (concept.tipoDescuento === 'PORCENTAJE') {
+      return `${Number(concept.valorDescuento ?? 0).toFixed(2)}%`
+    }
+    return formatCurrency(concept.valorDescuento)
+  }
+
+  return formatCurrency(concept.montoBase)
 }
 
 function getStatusTone(status) {
   return status === 'ACTIVO'
     ? 'bg-emerald-100 text-emerald-700'
     : 'bg-slate-100 text-slate-600'
+}
+
+function getConceptTypeTone(type) {
+  return type === 'DESCUENTO'
+    ? 'bg-fuchsia-100 text-fuchsia-700'
+    : 'bg-cobalt-soft text-cobalt'
 }
 
 function buildSummaryCards(summary) {
@@ -96,9 +148,9 @@ function buildSummaryCards(summary) {
       noteTone: 'text-amber-600',
     },
     {
-      title: 'Exonerados de IGV',
-      value: String(summary.exoneradosIgv ?? 0),
-      note: 'Revisar reglas tributarias',
+      title: 'Descuentos configurados',
+      value: String(summary.descuentosConfigurados ?? 0),
+      note: 'Reglas comerciales listas para tesoreria',
       accent: 'border-fuchsia-500',
       noteTone: 'text-fuchsia-600',
     },
@@ -108,10 +160,14 @@ function buildSummaryCards(summary) {
 function normalizeConceptForForm(concept) {
   return {
     codigo: concept.codigo,
+    tipoConcepto: concept.tipoConcepto ?? 'NORMAL',
     nombre: concept.nombre,
     categoria: concept.categoria,
     descripcion: concept.descripcion ?? '',
     montoBase: String(concept.montoBase ?? ''),
+    tipoDescuento: concept.tipoDescuento ?? 'MONTO_FIJO',
+    valorDescuento: concept.valorDescuento != null ? String(concept.valorDescuento) : '',
+    aplicaDescuentoA: concept.aplicaDescuentoA ?? 'APORTACIONES',
     usaPeriodo: concept.usaPeriodo,
     permiteCantidad: concept.permiteCantidad,
     admiteDescuento: concept.admiteDescuento,
@@ -123,16 +179,33 @@ function normalizeConceptForForm(concept) {
   }
 }
 
+function notifyConceptCatalogUpdated() {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  const updatedAt = String(Date.now())
+  window.localStorage.setItem(conceptosSyncStorageKey, updatedAt)
+  window.dispatchEvent(
+    new CustomEvent(conceptosSyncEventName, {
+      detail: { updatedAt },
+    }),
+  )
+}
+
 function ConceptFormModal({
   formValues,
   formError,
   isSubmitting,
   mode,
   onCheckboxChange,
+  onConceptTypeChange,
   onClose,
   onInputChange,
   onSubmit,
 }) {
+  const isDiscount = formValues.tipoConcepto === 'DESCUENTO'
+
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/45 px-4 py-8 backdrop-blur-sm">
       <div className="w-full max-w-3xl rounded-[32px] border border-white/80 bg-white shadow-[0_24px_70px_-36px_rgba(15,23,42,0.8)]">
@@ -168,6 +241,33 @@ function ConceptFormModal({
             </div>
           ) : null}
 
+          <div className="rounded-[24px] border border-slate-200 bg-[#f8fbff] p-4">
+            <p className="text-xs font-bold uppercase tracking-[0.2em] text-slate-400">
+              Tipo de concepto
+            </p>
+            <div className="mt-4 inline-flex rounded-2xl bg-white p-1 shadow-[inset_0_0_0_1px_rgba(226,232,240,0.9)]">
+              {conceptTypeOptions.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => onConceptTypeChange(option.value)}
+                  className={`rounded-[14px] px-4 py-2.5 text-sm font-semibold transition ${
+                    formValues.tipoConcepto === option.value
+                      ? 'bg-[linear-gradient(135deg,#1739a6_0%,#204edc_100%)] text-white shadow-[0_16px_30px_-24px_rgba(30,64,175,0.9)]'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+            <p className="mt-3 text-sm text-slate-500">
+              {isDiscount
+                ? 'Configura una regla comercial para aplicar rebajas por monto fijo o porcentaje.'
+                : 'Configura un concepto operativo que tesoreria podra usar en cobros regulares.'}
+            </p>
+          </div>
+
           <div className="grid gap-5 md:grid-cols-2">
             <label className="space-y-2">
               <span className="text-sm font-semibold text-slate-700">Codigo</span>
@@ -196,55 +296,100 @@ function ConceptFormModal({
             </label>
           </div>
 
-          <div className="grid gap-5 md:grid-cols-3">
-            <label className="space-y-2">
-              <span className="text-sm font-semibold text-slate-700">Categoria</span>
-              <select
-                name="categoria"
-                value={formValues.categoria}
-                onChange={onInputChange}
-                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-cobalt"
-              >
-                {categoryOptions
-                  .filter((option) => option.value !== 'Todos')
-                  .map((option) => (
+          {isDiscount ? (
+            <div className="grid gap-5 md:grid-cols-3">
+              <div className="space-y-2">
+                <span className="text-sm font-semibold text-slate-700">Categoria interna</span>
+                <div className="flex h-[50px] items-center rounded-2xl border border-slate-200 bg-slate-50 px-4">
+                  <span className="inline-flex rounded-full bg-fuchsia-100 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-fuchsia-700">
+                    Descuentos
+                  </span>
+                </div>
+              </div>
+
+              <label className="space-y-2">
+                <span className="text-sm font-semibold text-slate-700">Tipo de descuento</span>
+                <select
+                  name="tipoDescuento"
+                  value={formValues.tipoDescuento}
+                  onChange={onInputChange}
+                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-cobalt"
+                >
+                  {discountTypeOptions.map((option) => (
                     <option key={option.value} value={option.value}>
                       {option.label}
                     </option>
                   ))}
-              </select>
-            </label>
+                </select>
+              </label>
 
-            <label className="space-y-2">
-              <span className="text-sm font-semibold text-slate-700">Monto base</span>
-              <input
-                type="number"
-                name="montoBase"
-                value={formValues.montoBase}
-                onChange={onInputChange}
-                required
-                min="0"
-                step="0.01"
-                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-cobalt"
-              />
-            </label>
+              <label className="space-y-2">
+                <span className="text-sm font-semibold text-slate-700">Estado</span>
+                <select
+                  name="estado"
+                  value={formValues.estado}
+                  onChange={onInputChange}
+                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-cobalt"
+                >
+                  {estadoOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          ) : (
+            <div className="grid gap-5 md:grid-cols-3">
+              <label className="space-y-2">
+                <span className="text-sm font-semibold text-slate-700">Categoria</span>
+                <select
+                  name="categoria"
+                  value={formValues.categoria}
+                  onChange={onInputChange}
+                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-cobalt"
+                >
+                  {categoryOptions
+                    .filter((option) => !['Todos', 'DESCUENTOS'].includes(option.value))
+                    .map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                </select>
+              </label>
 
-            <label className="space-y-2">
-              <span className="text-sm font-semibold text-slate-700">Estado</span>
-              <select
-                name="estado"
-                value={formValues.estado}
-                onChange={onInputChange}
-                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-cobalt"
-              >
-                {estadoOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
+              <label className="space-y-2">
+                <span className="text-sm font-semibold text-slate-700">Monto base</span>
+                <input
+                  type="number"
+                  name="montoBase"
+                  value={formValues.montoBase}
+                  onChange={onInputChange}
+                  required
+                  min="0"
+                  step="0.01"
+                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-cobalt"
+                />
+              </label>
+
+              <label className="space-y-2">
+                <span className="text-sm font-semibold text-slate-700">Estado</span>
+                <select
+                  name="estado"
+                  value={formValues.estado}
+                  onChange={onInputChange}
+                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-cobalt"
+                >
+                  {estadoOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          )}
 
           <label className="space-y-2">
             <span className="text-sm font-semibold text-slate-700">Descripcion</span>
@@ -258,33 +403,96 @@ function ConceptFormModal({
             />
           </label>
 
-          <div className="rounded-[24px] border border-slate-200 bg-[#f8fbff] p-4">
-            <p className="text-xs font-bold uppercase tracking-[0.2em] text-slate-400">
-              Parametros operativos
-            </p>
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              {[
-                ['usaPeriodo', 'Usa periodo'],
-                ['permiteCantidad', 'Permite cantidad'],
-                ['admiteDescuento', 'Admite descuento'],
-                ['admiteMora', 'Admite mora'],
-                ['afectaHabilitacion', 'Afecta habilitacion'],
-                ['exoneradoIgv', 'Exonerado IGV'],
-                ['requiereAdjunto', 'Requiere adjunto'],
-              ].map(([name, label]) => (
-                <label key={name} className="flex items-center gap-3 text-sm font-medium text-slate-700">
+          {isDiscount ? (
+            <div className="grid gap-5 md:grid-cols-[minmax(0,1fr)_320px]">
+              <div className="grid gap-5 md:grid-cols-2">
+                <label className="space-y-2">
+                  <span className="text-sm font-semibold text-slate-700">Valor del descuento</span>
                   <input
-                    type="checkbox"
-                    name={name}
-                    checked={formValues[name]}
-                    onChange={onCheckboxChange}
-                    className="h-4 w-4 rounded border-slate-300 accent-[#1739a6]"
+                    type="number"
+                    name="valorDescuento"
+                    value={formValues.valorDescuento}
+                    onChange={onInputChange}
+                    required
+                    min="0.01"
+                    step="0.01"
+                    placeholder={
+                      formValues.tipoDescuento === 'PORCENTAJE' ? 'Ej. 10' : 'Ej. 25.00'
+                    }
+                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-cobalt"
                   />
-                  {label}
+                  <p className="text-xs text-slate-500">
+                    {formValues.tipoDescuento === 'PORCENTAJE'
+                      ? 'Ingresa un porcentaje entre 0.01 y 100.'
+                      : 'Ingresa el monto fijo que se descontara del cobro.'}
+                  </p>
                 </label>
-              ))}
+
+                <label className="space-y-2">
+                  <span className="text-sm font-semibold text-slate-700">Aplica sobre</span>
+                  <select
+                    name="aplicaDescuentoA"
+                    value={formValues.aplicaDescuentoA}
+                    onChange={onInputChange}
+                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-cobalt"
+                  >
+                    {discountApplyOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+
+              <div className="rounded-[24px] border border-fuchsia-200 bg-[linear-gradient(180deg,#fff8ff_0%,#fffdfd_100%)] p-4">
+                <p className="text-xs font-bold uppercase tracking-[0.2em] text-fuchsia-600">
+                  Vista operativa
+                </p>
+                <p className="mt-3 text-sm font-semibold text-slate-900">
+                  {formatDiscountTypeLabel(formValues.tipoDescuento)}{' '}
+                  {formValues.tipoDescuento === 'PORCENTAJE'
+                    ? `${formValues.valorDescuento || '0'}%`
+                    : formatCurrency(formValues.valorDescuento || 0)}
+                </p>
+                <p className="mt-2 text-sm leading-6 text-slate-600">
+                  Aplicara sobre {formatDiscountApplyLabel(formValues.aplicaDescuentoA).toLowerCase()}.
+                </p>
+                <p className="mt-3 text-xs leading-5 text-slate-500">
+                  Este tipo de concepto no usa periodo, cantidad, mora ni adjuntos. El sistema lo
+                  guarda como regla comercial para tesoreria.
+                </p>
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="rounded-[24px] border border-slate-200 bg-[#f8fbff] p-4">
+              <p className="text-xs font-bold uppercase tracking-[0.2em] text-slate-400">
+                Parametros operativos
+              </p>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                {[
+                  ['usaPeriodo', 'Usa periodo'],
+                  ['permiteCantidad', 'Permite cantidad'],
+                  ['admiteDescuento', 'Admite descuento'],
+                  ['admiteMora', 'Admite mora'],
+                  ['afectaHabilitacion', 'Afecta habilitacion'],
+                  ['exoneradoIgv', 'Exonerado IGV'],
+                  ['requiereAdjunto', 'Requiere adjunto'],
+                ].map(([name, label]) => (
+                  <label key={name} className="flex items-center gap-3 text-sm font-medium text-slate-700">
+                    <input
+                      type="checkbox"
+                      name={name}
+                      checked={formValues[name]}
+                      onChange={onCheckboxChange}
+                      className="h-4 w-4 rounded border-slate-300 accent-[#1739a6]"
+                    />
+                    {label}
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div className="flex justify-end gap-3 pt-2">
             <button
@@ -358,10 +566,11 @@ function ConceptosPage() {
     activos: 0,
     categorias: 0,
     afectanHabilitacion: 0,
-    exoneradosIgv: 0,
+    descuentosConfigurados: 0,
   })
   const [isLoading, setIsLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState('')
+  const [feedbackMessage, setFeedbackMessage] = useState('')
   const [isFormOpen, setIsFormOpen] = useState(false)
   const [formMode, setFormMode] = useState('create')
   const [formValues, setFormValues] = useState(initialFormValues)
@@ -381,7 +590,7 @@ function ConceptosPage() {
         activos: response.activos ?? 0,
         categorias: response.categorias ?? 0,
         afectanHabilitacion: response.afectanHabilitacion ?? 0,
-        exoneradosIgv: response.exoneradosIgv ?? 0,
+        descuentosConfigurados: response.descuentosConfigurados ?? 0,
       })
     } catch (error) {
       setErrorMessage(error.message)
@@ -404,7 +613,13 @@ function ConceptosPage() {
       const matchesSearch =
         normalizedSearch.length === 0
           ? true
-          : [concept.codigo, concept.nombre, concept.descripcion ?? '']
+          : [
+              concept.codigo,
+              concept.nombre,
+              concept.descripcion ?? '',
+              formatConceptTypeLabel(concept.tipoConcepto),
+              formatDiscountApplyLabel(concept.aplicaDescuentoA ?? ''),
+            ]
               .some((value) => value.toLowerCase().includes(normalizedSearch))
 
       return matchesFilter && matchesSearch
@@ -419,6 +634,7 @@ function ConceptosPage() {
   )
 
   function openCreateModal() {
+    setFeedbackMessage('')
     setFormMode('create')
     setEditingConceptId(null)
     setFormValues(initialFormValues)
@@ -427,6 +643,7 @@ function ConceptosPage() {
   }
 
   function openEditModal(concept) {
+    setFeedbackMessage('')
     setFormMode('edit')
     setEditingConceptId(concept.id)
     setFormValues(normalizeConceptForForm(concept))
@@ -457,15 +674,54 @@ function ConceptosPage() {
     }))
   }
 
+  function handleConceptTypeChange(nextType) {
+    setFormValues((current) => {
+      if (nextType === 'DESCUENTO') {
+        return {
+          ...current,
+          tipoConcepto: 'DESCUENTO',
+          categoria: 'DESCUENTOS',
+          montoBase: '0',
+          tipoDescuento: current.tipoDescuento || 'MONTO_FIJO',
+          valorDescuento: current.valorDescuento,
+          aplicaDescuentoA: current.aplicaDescuentoA || 'APORTACIONES',
+          usaPeriodo: false,
+          permiteCantidad: false,
+          admiteDescuento: false,
+          admiteMora: false,
+          afectaHabilitacion: false,
+          exoneradoIgv: false,
+          requiereAdjunto: false,
+        }
+      }
+
+      return {
+        ...current,
+        tipoConcepto: 'NORMAL',
+        categoria:
+          current.categoria && current.categoria !== 'DESCUENTOS'
+            ? current.categoria
+            : 'SERVICIOS',
+        montoBase: current.montoBase === '0' ? '' : current.montoBase,
+      }
+    })
+  }
+
   async function handleSubmit(event) {
     event.preventDefault()
     setIsSubmitting(true)
     setFormError('')
+    setErrorMessage('')
 
+    const isDiscount = formValues.tipoConcepto === 'DESCUENTO'
     const payload = {
       ...formValues,
-      montoBase: Number(formValues.montoBase),
+      categoria: isDiscount ? null : formValues.categoria,
       descripcion: formValues.descripcion.trim(),
+      montoBase: isDiscount ? null : Number(formValues.montoBase),
+      tipoDescuento: isDiscount ? formValues.tipoDescuento : null,
+      valorDescuento: isDiscount ? Number(formValues.valorDescuento) : null,
+      aplicaDescuentoA: isDiscount ? formValues.aplicaDescuentoA : null,
     }
 
     try {
@@ -475,6 +731,14 @@ function ConceptosPage() {
         await updateTesoreriaConceptoCobro(editingConceptId, payload)
       }
 
+      notifyConceptCatalogUpdated()
+      setFeedbackMessage(
+        formMode === 'create'
+          ? 'El concepto se registro correctamente.'
+          : 'El concepto se actualizo correctamente.',
+      )
+      setSearchTerm('')
+      setCurrentPage(1)
       closeFormModal()
       await loadCatalog()
     } catch (error) {
@@ -489,10 +753,19 @@ function ConceptosPage() {
     }
 
     setIsSubmitting(true)
+    setErrorMessage('')
     try {
-      await deleteTesoreriaConceptoCobro(deleteTarget.id)
+      const response = await deleteTesoreriaConceptoCobro(deleteTarget.id)
+      notifyConceptCatalogUpdated()
+      setFeedbackMessage(
+        response?.mensaje ??
+          'La operacion sobre el concepto se completo correctamente.',
+      )
       setDeleteTarget(null)
       setIsSubmitting(false)
+      setSearchTerm('')
+      setActiveFilter('Todos')
+      setCurrentPage(1)
       await loadCatalog()
     } catch (error) {
       setErrorMessage(error.message)
@@ -504,14 +777,15 @@ function ConceptosPage() {
     const rows = filteredConcepts.map((concept) =>
       [
         concept.codigo,
+        formatConceptTypeLabel(concept.tipoConcepto),
         concept.nombre,
         formatCategoryLabel(concept.categoria),
-        formatCurrency(concept.montoBase),
+        `"${formatConceptAmount(concept)}"`,
         formatStatusLabel(concept.estado),
       ].join(','),
     )
 
-    const csv = ['codigo,nombre,categoria,monto,estado', ...rows].join('\n')
+    const csv = ['codigo,tipo,nombre,categoria,monto,estado', ...rows].join('\n')
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
@@ -561,6 +835,12 @@ function ConceptosPage() {
           </button>
         </div>
       </section>
+
+      {feedbackMessage ? (
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+          {feedbackMessage}
+        </div>
+      ) : null}
 
       <section className="grid gap-4 xl:grid-cols-4">
         {summaryCards.map((card) => (
@@ -663,9 +943,23 @@ function ConceptosPage() {
                       <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-400 lg:hidden">
                         Concepto
                       </p>
-                      <p className="font-semibold text-slate-900">{concept.nombre}</p>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="font-semibold text-slate-900">{concept.nombre}</p>
+                        <span
+                          className={`inline-flex rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] ${getConceptTypeTone(
+                            concept.tipoConcepto,
+                          )}`}
+                        >
+                          {formatConceptTypeLabel(concept.tipoConcepto)}
+                        </span>
+                      </div>
                       <p className="mt-1 text-sm leading-6 text-slate-500">
                         {concept.descripcion}
+                        {concept.tipoConcepto === 'DESCUENTO'
+                          ? ` · ${formatDiscountTypeLabel(concept.tipoDescuento)} sobre ${formatDiscountApplyLabel(
+                              concept.aplicaDescuentoA,
+                            ).toLowerCase()}`
+                          : ''}
                       </p>
                     </div>
                     <div>
@@ -681,7 +975,7 @@ function ConceptosPage() {
                         Monto
                       </p>
                       <p className="text-sm font-semibold text-slate-900">
-                        {formatCurrency(concept.montoBase)}
+                        {formatConceptAmount(concept)}
                       </p>
                     </div>
                     <div>
@@ -759,6 +1053,7 @@ function ConceptosPage() {
           isSubmitting={isSubmitting}
           mode={formMode}
           onCheckboxChange={handleCheckboxChange}
+          onConceptTypeChange={handleConceptTypeChange}
           onClose={closeFormModal}
           onInputChange={handleInputChange}
           onSubmit={handleSubmit}

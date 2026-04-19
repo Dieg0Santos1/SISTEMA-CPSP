@@ -12,6 +12,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import pe.cpsp.sistema.colegiados.domain.model.Colegiado;
+import pe.cpsp.sistema.colegiados.domain.model.PersonaExterna;
 import pe.cpsp.sistema.common.persistence.AuditableEntity;
 
 @Getter
@@ -30,6 +31,10 @@ public class EventoAsistencia extends AuditableEntity {
   private Evento evento;
 
   @ManyToOne(fetch = FetchType.LAZY)
-  @JoinColumn(name = "colegiado_id", nullable = false)
+  @JoinColumn(name = "colegiado_id")
   private Colegiado colegiado;
+
+  @ManyToOne(fetch = FetchType.LAZY)
+  @JoinColumn(name = "persona_externa_id")
+  private PersonaExterna personaExterna;
 }
