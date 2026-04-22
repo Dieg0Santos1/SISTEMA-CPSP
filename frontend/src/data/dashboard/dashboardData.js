@@ -65,12 +65,13 @@ export const quickActions = [
     title: 'Registrar cobro',
     description: 'Aportaciones, boletas y conceptos',
     icon: CreditCard,
-    path: '/caja-cobros',
+    path: '/caja-cobros/registrar',
   },
   {
     title: 'Generar reporte',
     description: 'Resumen por fechas o ingresos',
     icon: FileSpreadsheet,
+    path: '/reportes',
   },
 ]
 

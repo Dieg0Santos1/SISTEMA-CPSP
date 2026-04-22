@@ -12,6 +12,7 @@ import {
 import {
   getTesoreriaColegiadoCobranza,
   getTesoreriaColegiados,
+  getTesoreriaCobroPdf,
   getTesoreriaConceptosCobro,
   createTesoreriaFraccionamiento,
   markTesoreriaCobroPrinted,
@@ -268,84 +269,18 @@ function buildPeriodRangeLabel(periods) {
   return orderedPeriods.length === 1 ? firstLabel : `${firstLabel} - ${lastLabel}`
 }
 
-function createPrintableHtml(receipt) {
-  const itemRows = receipt.items
-    .map(
-      (item) => `
-        <tr>
-          <td>${item.concepto}</td>
-          <td>${item.periodoReferencia ?? '-'}</td>
-          <td style="text-align:center;">${item.cantidad}</td>
-          <td style="text-align:right;">S/ ${Number(item.montoUnitario ?? 0).toFixed(2)}</td>
-          <td style="text-align:right;">S/ ${Number(item.totalLinea ?? 0).toFixed(2)}</td>
-        </tr>`,
-    )
-    .join('')
+function openPdfBlob(blob) {
+  const url = URL.createObjectURL(blob)
+  const pdfWindow = window.open(url, '_blank')
 
-  return `<!DOCTYPE html>
-  <html lang="es">
-    <head>
-      <meta charset="utf-8" />
-      <title>${receipt.tipoComprobante} ${receipt.serie}-${String(receipt.numeroComprobante).padStart(7, '0')}</title>
-      <style>
-        body { font-family: Arial, sans-serif; padding: 24px; color: #0f172a; }
-        h1, p { margin: 0; }
-        .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; }
-        .badge { display: inline-block; padding: 6px 12px; border-radius: 999px; background: #dbeafe; color: #1739a6; font-weight: 700; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; }
-        .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-bottom: 24px; }
-        .card { border: 1px solid #dbe3f0; border-radius: 16px; padding: 12px 16px; }
-        .label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.16em; color: #64748b; font-weight: 700; }
-        .value { margin-top: 8px; font-size: 16px; font-weight: 700; }
-        table { width: 100%; border-collapse: collapse; margin-top: 24px; }
-        th, td { border-bottom: 1px solid #e2e8f0; padding: 10px 8px; font-size: 14px; }
-        th { text-align: left; font-size: 12px; text-transform: uppercase; letter-spacing: 0.12em; color: #475569; }
-        .totals { margin-top: 24px; margin-left: auto; width: 280px; }
-        .totals-row { display: flex; justify-content: space-between; padding: 8px 0; }
-        .totals-row.total { font-size: 18px; font-weight: 700; border-top: 1px solid #cbd5e1; margin-top: 8px; padding-top: 12px; }
-      </style>
-    </head>
-    <body>
-      <div class="header">
-        <div>
-          <p class="badge">${receipt.tipoComprobante}</p>
-          <h1 style="margin-top:12px;">${receipt.serie}-${String(receipt.numeroComprobante).padStart(7, '0')}</h1>
-          <p style="margin-top:10px; color:#475569;">Emitido el ${new Intl.DateTimeFormat('es-PE', { day: '2-digit', month: 'long', year: 'numeric' }).format(new Date(`${receipt.fechaEmision}T00:00:00`))}</p>
-        </div>
-        <div style="text-align:right;">
-          <p class="label">Metodo de pago</p>
-          <p class="value">${receipt.metodoPago}</p>
-        </div>
-      </div>
-      <div class="grid">
-        <div class="card">
-          <p class="label">Colegiado</p>
-          <p class="value">${receipt.colegiadoNombre}</p>
-        </div>
-        <div class="card">
-          <p class="label">Codigo / DNI</p>
-          <p class="value">${receipt.codigoColegiatura} / ${receipt.dni}</p>
-        </div>
-      </div>
-      <table>
-        <thead>
-          <tr>
-            <th>Concepto</th>
-            <th>Referencia</th>
-            <th>Cantidad</th>
-            <th>Monto unitario</th>
-            <th>Total</th>
-          </tr>
-        </thead>
-        <tbody>${itemRows}</tbody>
-      </table>
-      <div class="totals">
-        <div class="totals-row"><span>Subtotal</span><strong>S/ ${Number(receipt.subtotal ?? 0).toFixed(2)}</strong></div>
-        <div class="totals-row"><span>Descuento</span><strong>S/ ${Number(receipt.descuentoTotal ?? 0).toFixed(2)}</strong></div>
-        <div class="totals-row"><span>Mora</span><strong>S/ ${Number(receipt.moraTotal ?? 0).toFixed(2)}</strong></div>
-        <div class="totals-row total"><span>Total</span><strong>S/ ${Number(receipt.total ?? 0).toFixed(2)}</strong></div>
-      </div>
-    </body>
-  </html>`
+  if (!pdfWindow) {
+    URL.revokeObjectURL(url)
+    throw new Error(
+      'No se pudo abrir el comprobante PDF. Verifica el bloqueo de ventanas emergentes.',
+    )
+  }
+
+  window.setTimeout(() => URL.revokeObjectURL(url), 60000)
 }
 
 function FractionationModal({
@@ -1263,18 +1198,8 @@ function CobrosRegistrarPage() {
     setIsPrintSaving(true)
 
     try {
-      const printWindow = window.open('', '_blank', 'width=960,height=720')
-
-      if (!printWindow) {
-        throw new Error(
-          'No se pudo abrir la ventana de impresion. Verifica el bloqueo de ventanas emergentes.',
-        )
-      }
-
-      printWindow.document.write(createPrintableHtml(receipt))
-      printWindow.document.close()
-      printWindow.focus()
-      printWindow.print()
+      const { blob } = await getTesoreriaCobroPdf(receipt.cobroId)
+      openPdfBlob(blob)
 
       if (!receipt.impreso) {
         await markTesoreriaCobroPrinted(receipt.cobroId)
@@ -1800,6 +1725,34 @@ function CobrosRegistrarPage() {
                       </p>
                     </div>
                   ) : null}
+                </div>
+              </div>
+            ) : selectedConcept ? (
+              <div className="mt-6 rounded-[24px] border border-slate-200 bg-[linear-gradient(180deg,#fbfcff_0%,#f8fafc_100%)] p-4">
+                <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="font-semibold text-slate-950">{selectedConcept.nombre}</p>
+                      <span className="rounded-full bg-cobalt-soft px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-cobalt">
+                        {selectedConcept.codigo}
+                      </span>
+                    </div>
+                    <p className="mt-2 text-sm text-slate-500">
+                      {selectedConcept.categoria}
+                    </p>
+                    <p className="mt-2 text-lg font-semibold text-rose-600">
+                      {buildConceptAmountLabel(selectedConcept)}
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleAddItem}
+                    disabled={!canAddItem}
+                    className="inline-flex h-[48px] min-w-[170px] items-center justify-center rounded-2xl bg-[linear-gradient(135deg,#1739a6_0%,#204edc_100%)] px-4 text-sm font-semibold text-white shadow-[0_18px_34px_-24px_rgba(30,64,175,0.95)] transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0"
+                  >
+                    Agregar item
+                  </button>
                 </div>
               </div>
             ) : null}

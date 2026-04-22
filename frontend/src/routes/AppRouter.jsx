@@ -6,6 +6,7 @@ import ConceptosPage from '../pages/ConceptosPage'
 import DashboardPage from '../pages/DashboardPage'
 import EventosPage from '../pages/EventosPage'
 import InventarioPage from '../pages/InventarioPage'
+import ReportesPage from '../pages/ReportesPage'
 import TribunalPage from '../pages/TribunalPage'
 import CobrosComprobantesPage from '../pages/cobros/CobrosComprobantesPage'
 import CobrosFraccionamientosPage from '../pages/cobros/CobrosFraccionamientosPage'
@@ -40,6 +41,7 @@ function AppRouter() {
         </Route>
         <Route path="/eventos" element={<EventosPage />} />
         <Route path="/inventario" element={<InventarioPage />} />
+        <Route path="/reportes" element={<ReportesPage />} />
         <Route path="/elecciones" element={<EleccionesPage />} />
         <Route path="/conceptos-cobro" element={<ConceptosPage />} />
         <Route path="/tribunal" element={<TribunalPage />} />

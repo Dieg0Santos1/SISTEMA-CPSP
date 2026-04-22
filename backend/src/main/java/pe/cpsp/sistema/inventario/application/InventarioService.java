@@ -93,7 +93,7 @@ public class InventarioService {
             .toList();
 
     List<InventarioMovimientoResponse> movimientos =
-        inventarioMovimientoRepository.findTop20ByOrderByFechaMovimientoDesc().stream()
+        inventarioMovimientoRepository.findTop5ByOrderByFechaMovimientoDesc().stream()
             .map(this::toMovimientoResponse)
             .toList();
 
@@ -165,6 +165,15 @@ public class InventarioService {
         ventas.stream().map(this::toVentaListItem).toList());
   }
 
+  @Transactional(readOnly = true)
+  public InventarioVentaResponse getVenta(Long ventaId) {
+    InventarioVenta venta =
+        inventarioVentaRepository
+            .findByIdWithDetails(ventaId)
+            .orElseThrow(() -> new ResourceNotFoundException("No existe la venta solicitada."));
+    return toVentaResponse(venta);
+  }
+
   public InventarioProductoListItemResponse crearProducto(InventarioProductoCreateRequest request) {
     String normalizedCode = request.codigo().trim().toUpperCase();
 
@@ -234,6 +243,7 @@ public class InventarioService {
     venta.setMetodoPago(metodoPago);
     venta.setFechaVenta(request.fechaVenta());
     venta.setObservacion(cleanNullable(request.observacion()));
+    venta.setImpreso(false);
 
     BigDecimal total = BigDecimal.ZERO;
     List<InventarioVentaDetalle> detalles = new ArrayList<>();
@@ -265,6 +275,15 @@ public class InventarioService {
     comprobanteSerieRepository.save(serie);
 
     return toVentaResponse(savedVenta);
+  }
+
+  public void marcarVentaImpresa(Long ventaId) {
+    InventarioVenta venta =
+        inventarioVentaRepository
+            .findByIdWithDetails(ventaId)
+            .orElseThrow(() -> new ResourceNotFoundException("No existe la venta solicitada."));
+    venta.setImpreso(true);
+    inventarioVentaRepository.save(venta);
   }
 
   public InventarioProductoDetailResponse registrarEntrega(Long productoId, Long colegiadoId) {
@@ -487,6 +506,7 @@ public class InventarioService {
         venta.getFechaVenta(),
         venta.getObservacion(),
         venta.getTotal(),
+        venta.isImpreso(),
         venta.getDetalles().stream()
             .map(
                 detalle ->

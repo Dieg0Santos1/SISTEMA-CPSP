@@ -6,8 +6,18 @@ import {
   Printer,
   ReceiptText,
   Search,
+  X,
 } from 'lucide-react'
-import { getTesoreriaComprobantes } from '../../services/tesoreriaApi'
+import {
+  downloadTesoreriaComprobantesReport,
+  getTesoreriaCobroPdf,
+  getTesoreriaComprobantes,
+  markTesoreriaCobroPrinted,
+} from '../../services/tesoreriaApi'
+import {
+  getInventarioVentaPdf,
+  markInventarioVentaPrinted,
+} from '../../services/inventarioApi'
 
 function formatCurrency(value) {
   return `S/ ${Number(value ?? 0).toFixed(2)}`
@@ -25,6 +35,27 @@ function formatDate(value) {
   }).format(new Date(`${value}T00:00:00`))
 }
 
+function openPdfBlob(blob) {
+  const url = URL.createObjectURL(blob)
+  const pdfWindow = window.open(url, '_blank')
+
+  if (!pdfWindow) {
+    URL.revokeObjectURL(url)
+    throw new Error('No se pudo abrir el comprobante PDF.')
+  }
+
+  window.setTimeout(() => URL.revokeObjectURL(url), 60000)
+}
+
+function downloadPdfFile(filename, blob) {
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  link.click()
+  window.setTimeout(() => URL.revokeObjectURL(url), 60000)
+}
+
 function CobrosComprobantesPage() {
   const [searchTerm, setSearchTerm] = useState('')
   const [currentPage, setCurrentPage] = useState(1)
@@ -32,6 +63,10 @@ function CobrosComprobantesPage() {
   const [data, setData] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState('')
+  const [activeReceiptActionId, setActiveReceiptActionId] = useState(null)
+  const [isExporting, setIsExporting] = useState(false)
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false)
+  const [activeExportFormat, setActiveExportFormat] = useState('')
 
   useEffect(() => {
     let isMounted = true
@@ -80,7 +115,7 @@ function CobrosComprobantesPage() {
       {
         title: 'Boletas emitidas',
         value: data?.boletasEmitidas ?? 0,
-        helper: 'Serie B001 activa',
+        helper: 'Tesoreria y ventas de inventario',
         tone: 'text-cobalt',
         accent: 'border-[#dbe5ff] bg-[linear-gradient(180deg,#ffffff_0%,#f4f8ff_100%)]',
       },
@@ -107,6 +142,115 @@ function CobrosComprobantesPage() {
   const page = data?.rows?.page ?? currentPage
   const seriesActivas = data?.seriesActivas ?? []
   const activeSeries = seriesActivas[activeSeriesIndex] ?? seriesActivas[0]
+
+  async function handleExportListado(format) {
+    setIsExporting(true)
+    setActiveExportFormat(format)
+    setErrorMessage('')
+
+    try {
+      await downloadTesoreriaComprobantesReport({
+        search: searchTerm,
+        printStatus: 'Todos',
+        tipo: 'Todos',
+        format,
+      })
+      setIsExportModalOpen(false)
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : 'No se pudo exportar el listado de comprobantes.',
+      )
+    } finally {
+      setIsExporting(false)
+      setActiveExportFormat('')
+    }
+  }
+
+  function markRowAsPrinted(receiptId, origin) {
+    setData((current) => {
+      if (!current?.rows?.content) {
+        return current
+      }
+
+      const nextRows = current.rows.content.map((item) =>
+        item.cobroId === receiptId && item.origenOperacion === origin
+          ? { ...item, impreso: true }
+          : item,
+      )
+      const currentPending = current.rows.content.filter((item) => !item.impreso).length
+      const nextPending = nextRows.filter((item) => !item.impreso).length
+
+      return {
+        ...current,
+        noImpresas: Math.max(0, (current.noImpresas ?? 0) - Math.max(0, currentPending - nextPending)),
+        rows: {
+          ...current.rows,
+          content: nextRows,
+        },
+      }
+    })
+  }
+
+  async function resolveReceiptFile(receipt) {
+    if (receipt.origenOperacion === 'VENTA_PRODUCTO') {
+      return getInventarioVentaPdf(receipt.cobroId)
+    }
+
+    return getTesoreriaCobroPdf(receipt.cobroId)
+  }
+
+  async function markReceiptPrinted(receipt) {
+    if (receipt.impreso) {
+      return
+    }
+
+    if (receipt.origenOperacion === 'VENTA_PRODUCTO') {
+      await markInventarioVentaPrinted(receipt.cobroId)
+    } else {
+      await markTesoreriaCobroPrinted(receipt.cobroId)
+    }
+
+    markRowAsPrinted(receipt.cobroId, receipt.origenOperacion)
+  }
+
+  async function handlePrintReceipt(receipt) {
+    const actionKey = `${receipt.origenOperacion}-${receipt.cobroId}-print`
+    setActiveReceiptActionId(actionKey)
+    setErrorMessage('')
+
+    try {
+      const file = await resolveReceiptFile(receipt)
+      openPdfBlob(file.blob)
+      await markReceiptPrinted(receipt)
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : 'No se pudo abrir el comprobante para impresion.',
+      )
+    } finally {
+      setActiveReceiptActionId(null)
+    }
+  }
+
+  async function handleDownloadReceipt(receipt) {
+    const actionKey = `${receipt.origenOperacion}-${receipt.cobroId}-download`
+    setActiveReceiptActionId(actionKey)
+    setErrorMessage('')
+
+    try {
+      const file = await resolveReceiptFile(receipt)
+      downloadPdfFile(file.filename, file.blob)
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : 'No se pudo descargar el comprobante.',
+      )
+    } finally {
+      setActiveReceiptActionId(null)
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -222,17 +366,19 @@ function CobrosComprobantesPage() {
                   setSearchTerm(event.target.value)
                   setCurrentPage(1)
                 }}
-                placeholder="Buscar por comprobante, serie o colegiado"
+                placeholder="Buscar por comprobante, serie o comprador"
                 className="w-full bg-transparent text-sm font-medium text-slate-700 outline-none placeholder:text-slate-400"
               />
             </label>
 
             <button
               type="button"
+              onClick={() => setIsExportModalOpen(true)}
+              disabled={isExporting}
               className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:border-slate-300"
             >
               <Download size={16} strokeWidth={2.1} />
-              Exportar listado
+              {isExporting ? 'Exportando...' : 'Exportar listado'}
             </button>
           </div>
         </div>
@@ -259,6 +405,9 @@ function CobrosComprobantesPage() {
                       </p>
                       <p className="mt-1 text-sm text-slate-500">{receipt.colegiadoNombre}</p>
                     </div>
+                    <span className="inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-slate-600">
+                      {receipt.origenOperacion === 'VENTA_PRODUCTO' ? 'Venta' : 'Cobro'}
+                    </span>
                     <span className="inline-flex rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-emerald-700">
                       {receipt.estado}
                     </span>
@@ -282,17 +431,25 @@ function CobrosComprobantesPage() {
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                   <button
                     type="button"
+                    onClick={() => handlePrintReceipt(receipt)}
+                    disabled={activeReceiptActionId !== null}
                     className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:border-slate-300"
                   >
                     <Printer size={16} strokeWidth={2.1} />
-                    Reimprimir
+                    {activeReceiptActionId === `${receipt.origenOperacion}-${receipt.cobroId}-print`
+                      ? 'Abriendo...'
+                      : 'Reimprimir'}
                   </button>
                   <button
                     type="button"
+                    onClick={() => handleDownloadReceipt(receipt)}
+                    disabled={activeReceiptActionId !== null}
                     className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[linear-gradient(135deg,#1739a6_0%,#204edc_100%)] px-4 py-3 text-sm font-semibold text-white shadow-[0_18px_34px_-24px_rgba(30,64,175,0.95)] transition hover:-translate-y-0.5"
                   >
                     <Download size={16} strokeWidth={2.1} />
-                    Descargar
+                    {activeReceiptActionId === `${receipt.origenOperacion}-${receipt.cobroId}-download`
+                      ? 'Descargando...'
+                      : 'Descargar'}
                   </button>
                 </div>
               </div>
@@ -340,6 +497,69 @@ function CobrosComprobantesPage() {
           </div>
         ) : null}
       </section>
+
+      {isExportModalOpen ? (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/55 px-4 py-6 backdrop-blur-sm">
+          <div className="w-full max-w-xl rounded-[32px] border border-white/80 bg-white shadow-[0_28px_90px_-38px_rgba(15,23,42,0.75)]">
+            <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-6 py-6">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.24em] text-cobalt">
+                  Reporte institucional
+                </p>
+                <h3 className="mt-3 text-2xl font-semibold tracking-tight text-slate-950">
+                  Exportar comprobantes emitidos
+                </h3>
+                <p className="mt-2 text-sm leading-6 text-slate-500">
+                  Descarga el listado formal de boletas y facturas con logo institucional.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  if (!isExporting) {
+                    setIsExportModalOpen(false)
+                  }
+                }}
+                className="inline-flex h-12 w-12 items-center justify-center rounded-[18px] border border-slate-200 bg-white text-slate-500 transition hover:border-slate-300 hover:text-slate-950"
+                aria-label="Cerrar exportacion"
+              >
+                <X size={18} strokeWidth={2.2} />
+              </button>
+            </div>
+
+            <div className="grid gap-3 px-6 py-6 sm:grid-cols-2">
+              <button
+                type="button"
+                onClick={() => handleExportListado('xlsx')}
+                disabled={isExporting}
+                className="inline-flex min-h-[88px] flex-col items-start justify-center rounded-[24px] border border-slate-200 bg-white px-5 py-4 text-left transition hover:border-cobalt hover:bg-[#f8fbff] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <span className="text-xs font-bold uppercase tracking-[0.22em] text-emerald-600">
+                  Excel
+                </span>
+                <span className="mt-2 text-lg font-semibold text-slate-950">
+                  {activeExportFormat === 'xlsx' ? 'Generando Excel...' : 'Exportar como Excel'}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleExportListado('pdf')}
+                disabled={isExporting}
+                className="inline-flex min-h-[88px] flex-col items-start justify-center rounded-[24px] border border-slate-200 bg-white px-5 py-4 text-left transition hover:border-cobalt hover:bg-[#f8fbff] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <span className="text-xs font-bold uppercase tracking-[0.22em] text-cobalt">
+                  PDF
+                </span>
+                <span className="mt-2 text-lg font-semibold text-slate-950">
+                  {activeExportFormat === 'pdf' ? 'Generando PDF...' : 'Exportar como PDF'}
+                </span>
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }

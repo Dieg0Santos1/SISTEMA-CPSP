@@ -14,8 +14,11 @@ import {
 import { cobrosPaymentMethods } from '../../data/cobros/cobrosData'
 import {
   getInventarioDashboard,
+  getInventarioVentaDetail,
+  getInventarioVentaPdf,
   getInventarioVentaClientes,
   getInventarioVentasPanel,
+  markInventarioVentaPrinted,
   postInventarioVenta,
 } from '../../services/inventarioApi'
 
@@ -49,88 +52,16 @@ function buildBuyerKey(buyer) {
   return `${buyer.tipoRegistro}-${buyer.id}`
 }
 
-function createPrintableSaleHtml(receipt) {
-  const itemRows = receipt.items
-    .map(
-      (item) => `
-        <tr>
-          <td>${item.nombre}</td>
-          <td>${item.codigo}</td>
-          <td style="text-align:center;">${item.cantidad}</td>
-          <td style="text-align:right;">${formatCurrency(item.precioUnitario)}</td>
-          <td style="text-align:right;">${formatCurrency(item.totalLinea)}</td>
-        </tr>`,
-    )
-    .join('')
+function openPdfBlob(blob) {
+  const url = URL.createObjectURL(blob)
+  const pdfWindow = window.open(url, '_blank')
 
-  const boletaLabel =
-    receipt.serie && receipt.numeroComprobante
-      ? `${receipt.serie}-${String(receipt.numeroComprobante).padStart(7, '0')}`
-      : receipt.referencia
+  if (!pdfWindow) {
+    URL.revokeObjectURL(url)
+    throw new Error('No se pudo abrir el comprobante PDF.')
+  }
 
-  return `<!DOCTYPE html>
-  <html lang="es">
-    <head>
-      <meta charset="utf-8" />
-      <title>Boleta ${boletaLabel}</title>
-      <style>
-        body { font-family: Arial, sans-serif; padding: 24px; color: #0f172a; }
-        h1, h2, p { margin: 0; }
-        .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; }
-        .badge { display: inline-block; padding: 6px 12px; border-radius: 999px; background: #dbeafe; color: #1739a6; font-weight: 700; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; }
-        .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 24px; }
-        .card { border: 1px solid #dbe3f0; border-radius: 16px; padding: 12px 16px; }
-        .label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.16em; color: #64748b; font-weight: 700; }
-        .value { margin-top: 8px; font-size: 16px; font-weight: 700; }
-        table { width: 100%; border-collapse: collapse; margin-top: 24px; }
-        th, td { border-bottom: 1px solid #e2e8f0; padding: 10px 8px; font-size: 14px; }
-        th { text-align: left; font-size: 12px; text-transform: uppercase; letter-spacing: 0.12em; color: #475569; }
-        .totals { margin-top: 24px; margin-left: auto; width: 280px; }
-        .totals-row { display: flex; justify-content: space-between; padding: 8px 0; }
-        .totals-row.total { font-size: 18px; font-weight: 700; border-top: 1px solid #cbd5e1; margin-top: 8px; padding-top: 12px; }
-      </style>
-    </head>
-    <body>
-      <div class="header">
-        <div>
-          <p class="badge">Boleta</p>
-          <h1 style="margin-top:12px;">${boletaLabel}</h1>
-          <p style="margin-top:10px; color:#475569;">Emitida el ${formatDate(receipt.fechaVenta)}</p>
-        </div>
-        <div style="text-align:right;">
-          <p class="label">Metodo de pago</p>
-          <p class="value">${receipt.metodoPago}</p>
-        </div>
-      </div>
-      <div class="grid">
-        <div class="card">
-          <p class="label">Comprador</p>
-          <p class="value">${receipt.clienteNombre}</p>
-          <p style="margin-top:8px; color:#475569;">${receipt.clienteCodigo} / ${receipt.clienteDocumento}</p>
-        </div>
-        <div class="card">
-          <p class="label">Perfil</p>
-          <p class="value">${receipt.clienteTipo === 'COLEGIADO' ? 'Colegiado' : 'Otro'}</p>
-          <p style="margin-top:8px; color:#475569;">${receipt.clienteDetalle ?? '-'}</p>
-        </div>
-      </div>
-      <table>
-        <thead>
-          <tr>
-            <th>Producto</th>
-            <th>Codigo</th>
-            <th>Cantidad</th>
-            <th>Precio unitario</th>
-            <th>Total</th>
-          </tr>
-        </thead>
-        <tbody>${itemRows}</tbody>
-      </table>
-      <div class="totals">
-        <div class="totals-row"><span>Total</span><strong>${formatCurrency(receipt.total)}</strong></div>
-      </div>
-    </body>
-  </html>`
+  window.setTimeout(() => URL.revokeObjectURL(url), 60000)
 }
 
 function SaleReceiptModal({ receipt, onClose, onPrint }) {
@@ -503,25 +434,26 @@ function CobrosVentaProductosPage() {
     }
   }
 
-  const handlePrintCompletedSale = useCallback(() => {
+  const handlePrintCompletedSale = useCallback(async () => {
     if (!completedSale) {
       return
     }
 
-    const printWindow = window.open('', '_blank', 'width=980,height=760')
+    try {
+      const { blob } = await getInventarioVentaPdf(completedSale.id)
+      openPdfBlob(blob)
 
-    if (!printWindow) {
-      setErrorMessage('No se pudo abrir la ventana para imprimir la boleta.')
-      return
+      if (!completedSale.impreso) {
+        markInventarioVentaPrinted(completedSale.id)
+          .then(() => getInventarioVentaDetail(completedSale.id))
+          .then((updatedSale) => {
+            setCompletedSale(updatedSale)
+          })
+          .catch(() => {})
+      }
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'No se pudo abrir la boleta PDF.')
     }
-
-    printWindow.document.open()
-    printWindow.document.write(createPrintableSaleHtml(completedSale))
-    printWindow.document.close()
-    printWindow.focus()
-    window.setTimeout(() => {
-      printWindow.print()
-    }, 250)
   }, [completedSale])
 
   return (
@@ -880,9 +812,6 @@ function CobrosVentaProductosPage() {
               3. Cierre de venta
             </p>
             <h2 className="mt-2 text-2xl font-semibold tracking-tight">Resumen y salida</h2>
-            <p className="mt-2 text-sm leading-6 text-slate-300">
-              El registro descuenta stock real y deja trazabilidad en inventario.
-            </p>
           </div>
 
           <div className="mt-5 space-y-4">

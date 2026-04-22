@@ -13,4 +13,5 @@ public record OperacionTesoreriaResponse(
     BigDecimal total,
     String serie,
     Long numeroComprobante,
+    String origenOperacion,
     String estado) {}

@@ -9,6 +9,7 @@ public record RegistrarCobroResponse(
     String colegiadoNombre,
     String codigoColegiatura,
     String dni,
+    String ruc,
     String tipoComprobante,
     String serie,
     Long numeroComprobante,

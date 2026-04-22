@@ -17,6 +17,9 @@ import org.springframework.transaction.annotation.Transactional;
 import pe.cpsp.sistema.colegiados.domain.model.Colegiado;
 import pe.cpsp.sistema.colegiados.infrastructure.persistence.repository.ColegiadoRepository;
 import pe.cpsp.sistema.common.exception.ResourceNotFoundException;
+import pe.cpsp.sistema.inventario.domain.model.InventarioVenta;
+import pe.cpsp.sistema.inventario.domain.model.InventarioVentaDetalle;
+import pe.cpsp.sistema.inventario.infrastructure.persistence.repository.InventarioVentaRepository;
 import pe.cpsp.sistema.tesoreria.api.dto.CobranzaColegiadoDetailResponse;
 import pe.cpsp.sistema.tesoreria.api.dto.CobranzaColegiadoListItemResponse;
 import pe.cpsp.sistema.tesoreria.api.dto.ComprobanteListadoResponse;
@@ -58,6 +61,7 @@ public class TesoreriaQueryService {
   private final ConceptoCobroRepository conceptoCobroRepository;
   private final ComprobanteSerieRepository comprobanteSerieRepository;
   private final CobroRepository cobroRepository;
+  private final InventarioVentaRepository inventarioVentaRepository;
   private final ColegiadoRepository colegiadoRepository;
   private final FraccionamientoRepository fraccionamientoRepository;
   private final TesoreriaSupport tesoreriaSupport;
@@ -67,6 +71,7 @@ public class TesoreriaQueryService {
       ConceptoCobroRepository conceptoCobroRepository,
       ComprobanteSerieRepository comprobanteSerieRepository,
       CobroRepository cobroRepository,
+      InventarioVentaRepository inventarioVentaRepository,
       ColegiadoRepository colegiadoRepository,
       FraccionamientoRepository fraccionamientoRepository,
       TesoreriaSupport tesoreriaSupport,
@@ -74,6 +79,7 @@ public class TesoreriaQueryService {
     this.conceptoCobroRepository = conceptoCobroRepository;
     this.comprobanteSerieRepository = comprobanteSerieRepository;
     this.cobroRepository = cobroRepository;
+    this.inventarioVentaRepository = inventarioVentaRepository;
     this.colegiadoRepository = colegiadoRepository;
     this.fraccionamientoRepository = fraccionamientoRepository;
     this.tesoreriaSupport = tesoreriaSupport;
@@ -83,15 +89,17 @@ public class TesoreriaQueryService {
   public TesoreriaResumenResponse getResumen() {
     LocalDate today = LocalDate.now(appClock);
     List<Cobro> cobros = loadCobrosSorted();
+    List<CajaOperacion> operaciones = loadCajaOperacionesSorted();
     Map<Long, TesoreriaSupport.CobranzaProfile> profiles = buildProfiles(today);
 
     BigDecimal totalHoy =
-        cobros.stream()
-            .filter(cobro -> today.equals(cobro.getFechaEmision()))
-            .map(Cobro::getTotal)
+        operaciones.stream()
+            .filter(operacion -> today.equals(operacion.fechaEmision()))
+            .map(CajaOperacion::total)
             .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-    long operacionesHoy = cobros.stream().filter(cobro -> today.equals(cobro.getFechaEmision())).count();
+    long operacionesHoy =
+        operaciones.stream().filter(operacion -> today.equals(operacion.fechaEmision())).count();
 
     long pendientesUrgentes =
         profiles.values().stream()
@@ -100,11 +108,11 @@ public class TesoreriaQueryService {
                     (profile.ceremoniaPendiente() ? 1L : 0L) + profile.periodosPendientes().size())
             .sum();
 
-    long comprobantesEmitidos = cobros.size();
+    long comprobantesEmitidos = operaciones.size();
     long boletasNoImpresas =
-        cobros.stream()
-            .filter(cobro -> "BOLETA".equals(cobro.getTipoComprobante().name()))
-            .filter(cobro -> !cobro.isImpreso())
+        operaciones.stream()
+            .filter(operacion -> "BOLETA".equals(operacion.tipoComprobante()))
+            .filter(operacion -> !operacion.impreso())
             .count();
 
     return new TesoreriaResumenResponse(
@@ -113,9 +121,9 @@ public class TesoreriaQueryService {
         pendientesUrgentes,
         comprobantesEmitidos,
         boletasNoImpresas,
-        buildResumenCanales(cobros, today),
-        buildEstadoCaja(cobros, today),
-        cobros.stream().limit(3).map(this::toOperacionResponse).toList());
+        buildResumenCanales(operaciones, today),
+        buildEstadoCaja(operaciones, today),
+        operaciones.stream().limit(3).map(this::toOperacionResponse).toList());
   }
 
   public PagedResponse<CobranzaColegiadoListItemResponse> listColegiados(
@@ -235,64 +243,63 @@ public class TesoreriaQueryService {
   public HistorialPageResponse getHistorial(String search, String metodoPago, int page, int size) {
     LocalDate today = LocalDate.now(appClock);
     LocalDate sevenDaysAgo = today.minusDays(6);
-    List<Cobro> cobros = loadCobrosSorted();
+    List<CajaOperacion> operaciones = loadCajaOperacionesSorted();
+    String normalizedSearch = normalize(search);
+    String normalizedMethod = normalize(metodoPago);
 
-    Predicate<Cobro> matchesSearch =
-        cobro -> {
-          String normalizedSearch = normalize(search);
-          if (normalizedSearch.isBlank()) {
-            return true;
-          }
-          return List.of(
-                  tesoreriaSupport.toReference(cobro.getId()),
-                  buildNombreCompleto(cobro.getColegiado()),
-                  tesoreriaSupport.buildConceptSummary(cobro),
-                  cobro.getSerie() + "-" + cobro.getNumeroComprobante())
-              .stream()
-              .filter(Objects::nonNull)
-              .map(String::toLowerCase)
-              .anyMatch(value -> value.contains(normalizedSearch));
-        };
+    Predicate<CajaOperacion> matchesSearch =
+        operacion ->
+            normalizedSearch.isBlank()
+                || List.of(
+                        operacion.reference(),
+                        operacion.participanteNombre(),
+                        operacion.conceptoResumen(),
+                        operacion.serie() + "-" + operacion.numeroComprobante(),
+                        operacion.tipoComprobante())
+                    .stream()
+                    .filter(Objects::nonNull)
+                    .map(String::toLowerCase)
+                    .anyMatch(value -> value.contains(normalizedSearch));
 
-    Predicate<Cobro> matchesMethod =
-        cobro -> {
-          String normalizedMethod = normalize(metodoPago);
-          if (normalizedMethod.isBlank() || "todos".equals(normalizedMethod)) {
-            return true;
-          }
-          return normalizeMetodoPagoLabel(cobro.getMetodoPago()).equalsIgnoreCase(metodoPago);
-        };
+    Predicate<CajaOperacion> matchesMethod =
+        operacion ->
+            normalizedMethod.isBlank()
+                || "todos".equals(normalizedMethod)
+                || normalize(operacion.metodoPago()).equals(normalizedMethod);
 
     List<OperacionTesoreriaResponse> rows =
-        cobros.stream()
+        operaciones.stream()
             .filter(matchesSearch.and(matchesMethod))
             .map(this::toOperacionResponse)
             .toList();
 
     BigDecimal totalHoy =
-        cobros.stream()
-            .filter(cobro -> today.equals(cobro.getFechaEmision()))
-            .map(Cobro::getTotal)
+        operaciones.stream()
+            .filter(operacion -> today.equals(operacion.fechaEmision()))
+            .map(CajaOperacion::total)
             .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-    long operacionesHoy = cobros.stream().filter(cobro -> today.equals(cobro.getFechaEmision())).count();
+    long operacionesHoy =
+        operaciones.stream().filter(operacion -> today.equals(operacion.fechaEmision())).count();
 
     BigDecimal totalUltimosSieteDias =
-        cobros.stream()
-            .filter(cobro -> !cobro.getFechaEmision().isBefore(sevenDaysAgo))
-            .map(Cobro::getTotal)
+        operaciones.stream()
+            .filter(operacion -> !operacion.fechaEmision().isBefore(sevenDaysAgo))
+            .map(CajaOperacion::total)
             .reduce(BigDecimal.ZERO, BigDecimal::add);
 
     long operacionesUltimosSieteDias =
-        cobros.stream().filter(cobro -> !cobro.getFechaEmision().isBefore(sevenDaysAgo)).count();
+        operaciones.stream()
+            .filter(operacion -> !operacion.fechaEmision().isBefore(sevenDaysAgo))
+            .count();
 
     BigDecimal ticketPromedio =
-        cobros.isEmpty()
+        operaciones.isEmpty()
             ? BigDecimal.ZERO
-            : cobros.stream()
-                .map(Cobro::getTotal)
+            : operaciones.stream()
+                .map(CajaOperacion::total)
                 .reduce(BigDecimal.ZERO, BigDecimal::add)
-                .divide(BigDecimal.valueOf(cobros.size()), 2, RoundingMode.HALF_UP);
+                .divide(BigDecimal.valueOf(operaciones.size()), 2, RoundingMode.HALF_UP);
 
     return new HistorialPageResponse(
         totalHoy,
@@ -305,40 +312,44 @@ public class TesoreriaQueryService {
 
   public ComprobantesPageResponse getComprobantes(
       String search, String printStatus, String tipo, int page, int size) {
-    List<Cobro> cobros = loadCobrosSorted();
+    List<CajaOperacion> operaciones = loadCajaOperacionesSorted();
     String normalizedSearch = normalize(search);
+    String normalizedPrintStatus = normalize(printStatus);
+    String normalizedTipo = normalize(tipo);
 
     List<ComprobanteListadoResponse> rows =
-        cobros.stream()
+        operaciones.stream()
             .filter(
-                cobro ->
+                operacion ->
                     normalizedSearch.isBlank()
                         || List.of(
-                                cobro.getSerie(),
-                                String.valueOf(cobro.getNumeroComprobante()),
-                                buildNombreCompleto(cobro.getColegiado()),
-                                cobro.getTipoComprobante().name())
+                                operacion.reference(),
+                                operacion.serie(),
+                                String.valueOf(operacion.numeroComprobante()),
+                                operacion.participanteNombre(),
+                                operacion.tipoComprobante())
                             .stream()
+                            .filter(Objects::nonNull)
                             .map(String::toLowerCase)
                             .anyMatch(value -> value.contains(normalizedSearch)))
             .filter(
-                cobro ->
-                    normalize(printStatus).isBlank()
-                        || "todos".equalsIgnoreCase(printStatus)
-                        || ("impreso".equalsIgnoreCase(printStatus) && cobro.isImpreso())
-                        || ("no impreso".equalsIgnoreCase(printStatus) && !cobro.isImpreso()))
+                operacion ->
+                    normalizedPrintStatus.isBlank()
+                        || "todos".equals(normalizedPrintStatus)
+                        || ("impreso".equals(normalizedPrintStatus) && operacion.impreso())
+                        || ("no impreso".equals(normalizedPrintStatus) && !operacion.impreso()))
             .filter(
-                cobro ->
-                    normalize(tipo).isBlank()
-                        || "todos".equalsIgnoreCase(tipo)
-                        || cobro.getTipoComprobante().name().equalsIgnoreCase(tipo))
+                operacion ->
+                    normalizedTipo.isBlank()
+                        || "todos".equals(normalizedTipo)
+                        || operacion.tipoComprobante().equalsIgnoreCase(tipo))
             .map(this::toComprobanteResponse)
             .toList();
 
     return new ComprobantesPageResponse(
-        cobros.stream().filter(cobro -> cobro.getTipoComprobante().name().equals("BOLETA")).count(),
-        cobros.stream().filter(cobro -> cobro.getTipoComprobante().name().equals("FACTURA")).count(),
-        cobros.stream().filter(cobro -> !cobro.isImpreso()).count(),
+        operaciones.stream().filter(operacion -> operacion.tipoComprobante().equals("BOLETA")).count(),
+        operaciones.stream().filter(operacion -> operacion.tipoComprobante().equals("FACTURA")).count(),
+        operaciones.stream().filter(operacion -> !operacion.impreso()).count(),
         listSeriesActivas(),
         paginate(rows, page, size));
   }
@@ -417,7 +428,28 @@ public class TesoreriaQueryService {
 
   private List<Cobro> loadCobrosSorted() {
     return cobroRepository.findAllWithDetails().stream()
-        .sorted(Comparator.comparing(Cobro::getFechaEmision).reversed().thenComparing(Cobro::getId).reversed())
+        .sorted(Comparator.comparing(Cobro::getFechaEmision).thenComparing(Cobro::getId).reversed())
+        .toList();
+  }
+
+  private List<InventarioVenta> loadVentasSorted() {
+    return inventarioVentaRepository.findAllByOrderByFechaVentaDescIdDesc().stream()
+        .sorted(
+            Comparator.comparing(InventarioVenta::getFechaVenta)
+                .thenComparing(InventarioVenta::getId)
+                .reversed())
+        .toList();
+  }
+
+  private List<CajaOperacion> loadCajaOperacionesSorted() {
+    return java.util.stream.Stream.concat(
+            loadCobrosSorted().stream().map(this::toCajaOperacion),
+            loadVentasSorted().stream().map(this::toCajaOperacion))
+        .sorted(
+            Comparator.comparing(CajaOperacion::fechaEmision)
+                .thenComparing(CajaOperacion::id)
+                .thenComparing(CajaOperacion::origenOperacion)
+                .reversed())
         .toList();
   }
 
@@ -473,32 +505,26 @@ public class TesoreriaQueryService {
     return profiles;
   }
 
-  private List<ResumenCanalResponse> buildResumenCanales(List<Cobro> cobros, LocalDate today) {
-    List<MetodoPago> paymentMethods =
-        List.of(
-            MetodoPago.EFECTIVO,
-            MetodoPago.TRANSFERENCIA,
-            MetodoPago.POS_TARJETA,
-            MetodoPago.YAPE_PLIN);
-
+  private List<ResumenCanalResponse> buildResumenCanales(List<CajaOperacion> operaciones, LocalDate today) {
+    List<String> paymentMethods = List.of("Efectivo", "Transferencia", "POS/Tarjeta", "Yape/Plin");
     BigDecimal totalDia =
-        cobros.stream()
-            .filter(cobro -> today.equals(cobro.getFechaEmision()))
-            .map(Cobro::getTotal)
+        operaciones.stream()
+            .filter(operacion -> today.equals(operacion.fechaEmision()))
+            .map(CajaOperacion::total)
             .reduce(BigDecimal.ZERO, BigDecimal::add);
 
     return paymentMethods.stream()
         .map(
             method -> {
-              List<Cobro> cobrosDelMetodo =
-                  cobros.stream()
-                      .filter(cobro -> today.equals(cobro.getFechaEmision()))
-                      .filter(cobro -> cobro.getMetodoPago() == method)
+              List<CajaOperacion> operacionesDelMetodo =
+                  operaciones.stream()
+                      .filter(operacion -> today.equals(operacion.fechaEmision()))
+                      .filter(operacion -> method.equals(operacion.metodoPago()))
                       .toList();
 
               BigDecimal amount =
-                  cobrosDelMetodo.stream()
-                      .map(Cobro::getTotal)
+                  operacionesDelMetodo.stream()
+                      .map(CajaOperacion::total)
                       .reduce(BigDecimal.ZERO, BigDecimal::add);
 
               long percentage =
@@ -508,66 +534,57 @@ public class TesoreriaQueryService {
                           .divide(totalDia, 0, RoundingMode.HALF_UP)
                           .longValue();
 
-              return new ResumenCanalResponse(
-                  normalizeMetodoPagoLabel(method),
-                  percentage,
-                  amount,
-                  cobrosDelMetodo.size());
+              return new ResumenCanalResponse(method, percentage, amount, operacionesDelMetodo.size());
             })
         .toList();
   }
 
-  private List<ResumenCajaResponse> buildEstadoCaja(List<Cobro> cobros, LocalDate today) {
-    List<MetodoPago> paymentMethods =
-        List.of(
-            MetodoPago.EFECTIVO,
-            MetodoPago.TRANSFERENCIA,
-            MetodoPago.POS_TARJETA,
-            MetodoPago.YAPE_PLIN);
-
+  private List<ResumenCajaResponse> buildEstadoCaja(List<CajaOperacion> operaciones, LocalDate today) {
+    List<String> paymentMethods = List.of("Efectivo", "Transferencia", "POS/Tarjeta", "Yape/Plin");
     return paymentMethods.stream()
         .map(
             method -> {
-              List<Cobro> cobrosDelMetodo =
-                  cobros.stream()
-                      .filter(cobro -> today.equals(cobro.getFechaEmision()))
-                      .filter(cobro -> cobro.getMetodoPago() == method)
+              List<CajaOperacion> operacionesDelMetodo =
+                  operaciones.stream()
+                      .filter(operacion -> today.equals(operacion.fechaEmision()))
+                      .filter(operacion -> method.equals(operacion.metodoPago()))
                       .toList();
               BigDecimal amount =
-                  cobrosDelMetodo.stream()
-                      .map(Cobro::getTotal)
+                  operacionesDelMetodo.stream()
+                      .map(CajaOperacion::total)
                       .reduce(BigDecimal.ZERO, BigDecimal::add);
-              return new ResumenCajaResponse(
-                  normalizeMetodoPagoLabel(method), amount, cobrosDelMetodo.size());
+              return new ResumenCajaResponse(method, amount, operacionesDelMetodo.size());
             })
         .toList();
   }
 
-  private OperacionTesoreriaResponse toOperacionResponse(Cobro cobro) {
+  private OperacionTesoreriaResponse toOperacionResponse(CajaOperacion operacion) {
     return new OperacionTesoreriaResponse(
-        cobro.getId(),
-        tesoreriaSupport.toReference(cobro.getId()),
-        cobro.getFechaEmision(),
-        buildNombreCompleto(cobro.getColegiado()),
-        tesoreriaSupport.buildConceptSummary(cobro),
-        normalizeMetodoPagoLabel(cobro.getMetodoPago()),
-        cobro.getTotal(),
-        cobro.getSerie(),
-        cobro.getNumeroComprobante(),
-        cobro.getEstado());
+        operacion.id(),
+        operacion.reference(),
+        operacion.fechaEmision(),
+        operacion.participanteNombre(),
+        operacion.conceptoResumen(),
+        operacion.metodoPago(),
+        operacion.total(),
+        operacion.serie(),
+        operacion.numeroComprobante(),
+        operacion.origenOperacion(),
+        operacion.estado());
   }
 
-  private ComprobanteListadoResponse toComprobanteResponse(Cobro cobro) {
+  private ComprobanteListadoResponse toComprobanteResponse(CajaOperacion operacion) {
     return new ComprobanteListadoResponse(
-        cobro.getId(),
-        cobro.getTipoComprobante().name(),
-        cobro.getSerie(),
-        cobro.getNumeroComprobante(),
-        buildNombreCompleto(cobro.getColegiado()),
-        cobro.getFechaEmision(),
-        cobro.getTotal(),
-        cobro.getEstado(),
-        cobro.isImpreso());
+        operacion.id(),
+        operacion.tipoComprobante(),
+        operacion.serie(),
+        operacion.numeroComprobante(),
+        operacion.participanteNombre(),
+        operacion.fechaEmision(),
+        operacion.total(),
+        operacion.estado(),
+        operacion.origenOperacion(),
+        operacion.impreso());
   }
 
   private ConceptoCobroResponse toConceptoResponse(ConceptoCobro concepto) {
@@ -662,6 +679,58 @@ public class TesoreriaQueryService {
     return "Cuota " + cuota.getNumeroCuota() + "/" + totalInstallments;
   }
 
+  private CajaOperacion toCajaOperacion(Cobro cobro) {
+    return new CajaOperacion(
+        cobro.getId(),
+        "TESORERIA",
+        tesoreriaSupport.toReference(cobro.getId()),
+        cobro.getFechaEmision(),
+        buildNombreCompleto(cobro.getColegiado()),
+        tesoreriaSupport.buildConceptSummary(cobro),
+        normalizeMetodoPagoLabel(cobro.getMetodoPago()),
+        cobro.getTotal(),
+        cobro.getSerie(),
+        cobro.getNumeroComprobante(),
+        cobro.getEstado(),
+        cobro.getTipoComprobante().name(),
+        cobro.isImpreso());
+  }
+
+  private CajaOperacion toCajaOperacion(InventarioVenta venta) {
+    return new CajaOperacion(
+        venta.getId(),
+        "VENTA_PRODUCTO",
+        venta.getReferencia(),
+        venta.getFechaVenta(),
+        venta.getClienteNombre(),
+        buildVentaConceptSummary(venta),
+        venta.getMetodoPago(),
+        venta.getTotal(),
+        venta.getSerie(),
+        venta.getNumeroComprobante(),
+        "EMITIDO",
+        "BOLETA",
+        venta.isImpreso());
+  }
+
+  private String buildVentaConceptSummary(InventarioVenta venta) {
+    List<String> nombres =
+        venta.getDetalles().stream()
+            .map(InventarioVentaDetalle::getProducto)
+            .filter(Objects::nonNull)
+            .map(producto -> producto.getNombre())
+            .filter(Objects::nonNull)
+            .distinct()
+            .limit(2)
+            .toList();
+
+    if (nombres.isEmpty()) {
+      return "Venta de productos";
+    }
+
+    return "Venta de productos · " + String.join(" + ", nombres);
+  }
+
   private BigDecimal calculateSaldoPendiente(Fraccionamiento fraccionamiento) {
     return fraccionamiento.getCuotas().stream()
         .filter(cuota -> cuota.getEstado() == EstadoFraccionamientoCuota.PENDIENTE)
@@ -732,4 +801,19 @@ public class TesoreriaQueryService {
         cuota.getEstado().name(),
         cuota.getEstado() == EstadoFraccionamientoCuota.PAGADA);
   }
+
+  private record CajaOperacion(
+      Long id,
+      String origenOperacion,
+      String reference,
+      LocalDate fechaEmision,
+      String participanteNombre,
+      String conceptoResumen,
+      String metodoPago,
+      BigDecimal total,
+      String serie,
+      Long numeroComprobante,
+      String estado,
+      String tipoComprobante,
+      boolean impreso) {}
 }

@@ -109,6 +109,7 @@ class InventarioServiceIntegrationTests {
     assertThat(venta.serie()).isEqualTo("B001");
     assertThat(venta.numeroComprobante()).isEqualTo(29897L);
     assertThat(venta.referencia()).isEqualTo("B001-0029897");
+    assertThat(venta.impreso()).isFalse();
     assertThat(venta.total()).isEqualByComparingTo("42.00");
     assertThat(venta.items()).hasSize(2);
     assertThat(dashboard.productos())
@@ -149,6 +150,23 @@ class InventarioServiceIntegrationTests {
     assertThat(venta.clienteNombre()).contains("Ana");
     assertThat(venta.referencia()).startsWith("B001-");
     assertThat(venta.total()).isEqualByComparingTo("36.00");
+  }
+
+  @Test
+  void marcarVentaImpresaActualizaBanderaPersistida() {
+    InventarioVentaResponse venta =
+        inventarioService.registrarVenta(
+            new InventarioRegistrarVentaRequest(
+                "COLEGIADO",
+                1L,
+                "EFECTIVO",
+                LocalDate.of(2026, 4, 18),
+                "Venta para impresion",
+                java.util.List.of(new InventarioRegistrarVentaItemRequest(1L, 1))));
+
+    inventarioService.marcarVentaImpresa(venta.id());
+
+    assertThat(inventarioService.getVenta(venta.id()).impreso()).isTrue();
   }
 
   @Test

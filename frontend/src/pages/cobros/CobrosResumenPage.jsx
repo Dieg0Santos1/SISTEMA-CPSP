@@ -246,7 +246,7 @@ function CobrosResumenPage() {
                 Ultimas operaciones
               </h2>
               <p className="mt-1 text-sm text-slate-500">
-                Ultimos cobros emitidos para consulta rapida.
+                Ultimos cobros y ventas emitidos para consulta rapida.
               </p>
             </div>
             <NavLink
@@ -265,13 +265,18 @@ function CobrosResumenPage() {
                     <p className="font-semibold text-slate-900">{item.conceptoResumen}</p>
                     <p className="mt-1 text-sm text-slate-500">{item.colegiadoNombre}</p>
                   </div>
-                  <span
-                    className={`inline-flex rounded-full px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] ${
-                      methodToneStyles[item.metodoPago] ?? 'bg-slate-100 text-slate-600'
-                    }`}
-                  >
-                    {item.metodoPago}
-                  </span>
+                  <div className="flex flex-wrap items-center justify-end gap-2">
+                    <span className="inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-slate-600">
+                      {item.origenOperacion === 'VENTA_PRODUCTO' ? 'Venta' : 'Cobro'}
+                    </span>
+                    <span
+                      className={`inline-flex rounded-full px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] ${
+                        methodToneStyles[item.metodoPago] ?? 'bg-slate-100 text-slate-600'
+                      }`}
+                    >
+                      {item.metodoPago}
+                    </span>
+                  </div>
                 </div>
                 <div className="mt-4 flex items-center justify-between gap-3 text-sm">
                   <div className="text-slate-500">

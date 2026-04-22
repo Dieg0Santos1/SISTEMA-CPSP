@@ -210,35 +210,16 @@ public class TesoreriaCobroService {
     serie.setCorrelativoActual(saved.getNumeroComprobante());
     comprobanteSerieRepository.save(serie);
 
-    return new RegistrarCobroResponse(
-        saved.getId(),
-        buildNombreCompleto(colegiado),
-        colegiado.getCodigoColegiatura(),
-        colegiado.getDni(),
-        saved.getTipoComprobante().name(),
-        saved.getSerie(),
-        saved.getNumeroComprobante(),
-        saved.getFechaEmision(),
-        normalizeMetodoPagoLabel(saved.getMetodoPago()),
-        saved.getObservacion(),
-        saved.getSubtotal(),
-        saved.getDescuentoTotal(),
-        saved.getMoraTotal(),
-        saved.getTotal(),
-        saved.isImpreso(),
-        saved.getDetalles().stream()
-            .map(
-                detalle ->
-                    new CobroItemResponse(
-                        detalle.getConceptoCobro().getNombre(),
-                        detalle.getConceptoCobro().getCodigo(),
-                        detalle.getPeriodoReferencia(),
-                        detalle.getCantidad(),
-                        detalle.getMontoUnitario(),
-                        detalle.getDescuento(),
-                        detalle.getMora(),
-                        detalle.getTotalLinea()))
-            .toList());
+    return toResponse(saved);
+  }
+
+  @Transactional(readOnly = true)
+  public RegistrarCobroResponse getCobro(Long cobroId) {
+    Cobro cobro =
+        cobroRepository
+            .findByIdWithDetails(cobroId)
+            .orElseThrow(() -> new ResourceNotFoundException("No existe el cobro indicado."));
+    return toResponse(cobro);
   }
 
   public void marcarImpreso(Long cobroId) {
@@ -405,5 +386,38 @@ public class TesoreriaCobroService {
       fraccionamiento.setEstado(EstadoFraccionamiento.PAGADO);
       fraccionamientoRepository.save(fraccionamiento);
     }
+  }
+
+  private RegistrarCobroResponse toResponse(Cobro cobro) {
+    return new RegistrarCobroResponse(
+        cobro.getId(),
+        buildNombreCompleto(cobro.getColegiado()),
+        cobro.getColegiado().getCodigoColegiatura(),
+        cobro.getColegiado().getDni(),
+        cobro.getColegiado().getRuc(),
+        cobro.getTipoComprobante().name(),
+        cobro.getSerie(),
+        cobro.getNumeroComprobante(),
+        cobro.getFechaEmision(),
+        normalizeMetodoPagoLabel(cobro.getMetodoPago()),
+        cobro.getObservacion(),
+        cobro.getSubtotal(),
+        cobro.getDescuentoTotal(),
+        cobro.getMoraTotal(),
+        cobro.getTotal(),
+        cobro.isImpreso(),
+        cobro.getDetalles().stream()
+            .map(
+                detalle ->
+                    new CobroItemResponse(
+                        detalle.getConceptoCobro().getNombre(),
+                        detalle.getConceptoCobro().getCodigo(),
+                        detalle.getPeriodoReferencia(),
+                        detalle.getCantidad(),
+                        detalle.getMontoUnitario(),
+                        detalle.getDescuento(),
+                        detalle.getMora(),
+                        detalle.getTotalLinea()))
+            .toList());
   }
 }

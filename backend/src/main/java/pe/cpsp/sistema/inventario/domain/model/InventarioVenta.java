@@ -68,6 +68,9 @@ public class InventarioVenta extends AuditableEntity {
   @Column(nullable = false, precision = 10, scale = 2)
   private BigDecimal total;
 
+  @Column(nullable = false)
+  private boolean impreso;
+
   @OneToMany(mappedBy = "venta", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
   private List<InventarioVentaDetalle> detalles = new ArrayList<>();
 }

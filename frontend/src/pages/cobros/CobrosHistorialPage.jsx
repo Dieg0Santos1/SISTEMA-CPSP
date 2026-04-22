@@ -1,6 +1,15 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ChevronLeft, ChevronRight, Download, FileSearch, Search } from 'lucide-react'
-import { getTesoreriaHistorial } from '../../services/tesoreriaApi'
+import { ChevronLeft, ChevronRight, Download, FileSearch, Search, X } from 'lucide-react'
+import {
+  downloadTesoreriaHistorialReport,
+  getTesoreriaCobroPdf,
+  getTesoreriaHistorial,
+  markTesoreriaCobroPrinted,
+} from '../../services/tesoreriaApi'
+import {
+  getInventarioVentaPdf,
+  markInventarioVentaPrinted,
+} from '../../services/inventarioApi'
 
 const methodFilters = ['Todos', 'Efectivo', 'Yape/Plin', 'Transferencia', 'POS/Tarjeta']
 
@@ -20,6 +29,18 @@ function formatDate(value) {
   }).format(new Date(`${value}T00:00:00`))
 }
 
+function openPdfBlob(blob) {
+  const url = URL.createObjectURL(blob)
+  const pdfWindow = window.open(url, '_blank')
+
+  if (!pdfWindow) {
+    URL.revokeObjectURL(url)
+    throw new Error('No se pudo abrir el comprobante PDF.')
+  }
+
+  window.setTimeout(() => URL.revokeObjectURL(url), 60000)
+}
+
 function CobrosHistorialPage() {
   const [searchTerm, setSearchTerm] = useState('')
   const [activeMethod, setActiveMethod] = useState(methodFilters[0])
@@ -27,6 +48,10 @@ function CobrosHistorialPage() {
   const [data, setData] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState('')
+  const [isExporting, setIsExporting] = useState(false)
+  const [activeRowActionId, setActiveRowActionId] = useState(null)
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false)
+  const [activeExportFormat, setActiveExportFormat] = useState('')
 
   useEffect(() => {
     let isMounted = true
@@ -96,6 +121,86 @@ function CobrosHistorialPage() {
   const totalPages = data?.rows?.totalPages ?? 1
   const page = data?.rows?.page ?? currentPage
 
+  function markRowAsPrinted(receiptId, origin) {
+    setData((current) => {
+      if (!current?.rows?.content) {
+        return current
+      }
+
+      return {
+        ...current,
+        rows: {
+          ...current.rows,
+          content: current.rows.content.map((item) =>
+            item.cobroId === receiptId && item.origenOperacion === origin
+              ? { ...item, estado: 'EMITIDO' }
+              : item,
+          ),
+        },
+      }
+    })
+  }
+
+  async function resolveReceiptFile(row) {
+    if (row.origenOperacion === 'VENTA_PRODUCTO') {
+      return getInventarioVentaPdf(row.cobroId)
+    }
+
+    return getTesoreriaCobroPdf(row.cobroId)
+  }
+
+  async function markReceiptPrinted(row) {
+    if (row.origenOperacion === 'VENTA_PRODUCTO') {
+      await markInventarioVentaPrinted(row.cobroId)
+    } else {
+      await markTesoreriaCobroPrinted(row.cobroId)
+    }
+
+    markRowAsPrinted(row.cobroId, row.origenOperacion)
+  }
+
+  async function handleExportReport(format) {
+    setIsExporting(true)
+    setActiveExportFormat(format)
+    setErrorMessage('')
+
+    try {
+      await downloadTesoreriaHistorialReport({
+        search: searchTerm,
+        metodoPago: activeMethod,
+        format,
+      })
+      setIsExportModalOpen(false)
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : 'No se pudo exportar el historial de caja.',
+      )
+    } finally {
+      setIsExporting(false)
+      setActiveExportFormat('')
+    }
+  }
+
+  async function handleViewDetail(row) {
+    const actionKey = `${row.origenOperacion}-${row.cobroId}-view`
+    setActiveRowActionId(actionKey)
+    setErrorMessage('')
+
+    try {
+      const file = await resolveReceiptFile(row)
+      openPdfBlob(file.blob)
+      await markReceiptPrinted(row)
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : 'No se pudo abrir el comprobante de esta operacion.',
+      )
+    } finally {
+      setActiveRowActionId(null)
+    }
+  }
+
   return (
     <div className="space-y-6">
       <section className="grid gap-4 lg:grid-cols-3">
@@ -120,10 +225,10 @@ function CobrosHistorialPage() {
           <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
             <div>
               <h2 className="text-2xl font-semibold tracking-tight text-slate-950">
-                Historial de cobros
+                Historial de caja
               </h2>
               <p className="mt-1 text-sm text-slate-500">
-                Consulta operativa por colegiado, comprobante o metodo de pago.
+                Consulta operativa por persona, comprobante o metodo de pago.
               </p>
             </div>
 
@@ -140,16 +245,18 @@ function CobrosHistorialPage() {
                     setSearchTerm(event.target.value)
                     setCurrentPage(1)
                   }}
-                  placeholder="Buscar por colegiado, cobro o comprobante"
+                  placeholder="Buscar por persona, venta o comprobante"
                   className="w-full bg-transparent text-sm font-medium text-slate-700 outline-none placeholder:text-slate-400"
                 />
               </label>
               <button
                 type="button"
+                onClick={() => setIsExportModalOpen(true)}
+                disabled={isExporting}
                 className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:border-slate-300"
               >
                 <Download size={16} strokeWidth={2.1} />
-                Exportar reporte
+                {isExporting ? 'Exportando...' : 'Exportar reporte'}
               </button>
             </div>
           </div>
@@ -188,6 +295,9 @@ function CobrosHistorialPage() {
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <p className="font-semibold text-cobalt">{row.reference}</p>
+                    <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-slate-600">
+                      {row.origenOperacion === 'VENTA_PRODUCTO' ? 'Venta' : 'Cobro'}
+                    </span>
                     <span
                       className={`inline-flex rounded-full px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] ${
                         row.metodoPago === 'Efectivo'
@@ -229,10 +339,14 @@ function CobrosHistorialPage() {
 
                   <button
                     type="button"
+                    onClick={() => handleViewDetail(row)}
+                    disabled={activeRowActionId !== null}
                     className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:border-slate-300"
                   >
                     <FileSearch size={16} strokeWidth={2.1} />
-                    Ver detalle
+                    {activeRowActionId === `${row.origenOperacion}-${row.cobroId}-view`
+                      ? 'Abriendo...'
+                      : 'Ver detalle'}
                   </button>
                 </div>
               </div>
@@ -241,7 +355,7 @@ function CobrosHistorialPage() {
 
           {!isLoading && rows.length === 0 ? (
             <div className="rounded-[24px] border border-slate-200 bg-white px-5 py-12 text-center text-sm text-slate-500">
-              No encontramos cobros con ese criterio.
+              No encontramos operaciones con ese criterio.
             </div>
           ) : null}
         </div>
@@ -251,7 +365,7 @@ function CobrosHistorialPage() {
             <p>
               Mostrando {((page ?? 1) - 1) * (data?.rows?.size ?? 5) + 1} a{' '}
               {Math.min((page ?? 1) * (data?.rows?.size ?? 5), data?.rows?.totalElements ?? rows.length)} de{' '}
-              {data?.rows?.totalElements ?? rows.length} cobros
+              {data?.rows?.totalElements ?? rows.length} operaciones
             </p>
 
             <div className="flex items-center gap-2">
@@ -280,6 +394,69 @@ function CobrosHistorialPage() {
           </div>
         ) : null}
       </section>
+
+      {isExportModalOpen ? (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/55 px-4 py-6 backdrop-blur-sm">
+          <div className="w-full max-w-xl rounded-[32px] border border-white/80 bg-white shadow-[0_28px_90px_-38px_rgba(15,23,42,0.75)]">
+            <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-6 py-6">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.24em] text-cobalt">
+                  Reporte institucional
+                </p>
+                <h3 className="mt-3 text-2xl font-semibold tracking-tight text-slate-950">
+                  Exportar historial de caja
+                </h3>
+                <p className="mt-2 text-sm leading-6 text-slate-500">
+                  Descarga el reporte con estructura formal y logo institucional.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  if (!isExporting) {
+                    setIsExportModalOpen(false)
+                  }
+                }}
+                className="inline-flex h-12 w-12 items-center justify-center rounded-[18px] border border-slate-200 bg-white text-slate-500 transition hover:border-slate-300 hover:text-slate-950"
+                aria-label="Cerrar exportacion"
+              >
+                <X size={18} strokeWidth={2.2} />
+              </button>
+            </div>
+
+            <div className="grid gap-3 px-6 py-6 sm:grid-cols-2">
+              <button
+                type="button"
+                onClick={() => handleExportReport('xlsx')}
+                disabled={isExporting}
+                className="inline-flex min-h-[88px] flex-col items-start justify-center rounded-[24px] border border-slate-200 bg-white px-5 py-4 text-left transition hover:border-cobalt hover:bg-[#f8fbff] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <span className="text-xs font-bold uppercase tracking-[0.22em] text-emerald-600">
+                  Excel
+                </span>
+                <span className="mt-2 text-lg font-semibold text-slate-950">
+                  {activeExportFormat === 'xlsx' ? 'Generando Excel...' : 'Exportar como Excel'}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleExportReport('pdf')}
+                disabled={isExporting}
+                className="inline-flex min-h-[88px] flex-col items-start justify-center rounded-[24px] border border-slate-200 bg-white px-5 py-4 text-left transition hover:border-cobalt hover:bg-[#f8fbff] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <span className="text-xs font-bold uppercase tracking-[0.22em] text-cobalt">
+                  PDF
+                </span>
+                <span className="mt-2 text-lg font-semibold text-slate-950">
+                  {activeExportFormat === 'pdf' ? 'Generando PDF...' : 'Exportar como PDF'}
+                </span>
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }

@@ -6,6 +6,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ClipboardList,
+  Download,
   FileBarChart2,
   FolderKanban,
   PackageCheck,
@@ -15,6 +16,7 @@ import {
   X,
 } from 'lucide-react'
 import { inventoryProcessCards } from '../data/inventario/inventarioData'
+import { downloadInventarioProductoReport } from '../services/inventarioApi'
 
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, '') ?? 'http://localhost:8080/api/v1'
@@ -102,7 +104,7 @@ function getProductPresentation(product) {
   }
 }
 
-function ProductReportsModal({ product, onClose, errorMessage }) {
+function ProductReportsModal({ product, onClose, errorMessage, onExport, isExporting, activeExportFormat }) {
   const receivedMembers = product.colegiados.filter((member) => member.entregado)
   const enabledMembers = product.colegiados.filter((member) => member.habilitado).length
 
@@ -123,14 +125,34 @@ function ProductReportsModal({ product, onClose, errorMessage }) {
             </p>
           </div>
 
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Cerrar modal"
-            className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-500 transition hover:border-slate-300 hover:text-slate-900"
-          >
-            <X size={18} strokeWidth={2.2} />
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => onExport('xlsx')}
+              disabled={isExporting}
+              className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:border-slate-300"
+            >
+              <Download size={16} strokeWidth={2.1} />
+              {activeExportFormat === 'xlsx' ? 'Excel...' : 'Excel'}
+            </button>
+            <button
+              type="button"
+              onClick={() => onExport('pdf')}
+              disabled={isExporting}
+              className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:border-slate-300"
+            >
+              <Download size={16} strokeWidth={2.1} />
+              {activeExportFormat === 'pdf' ? 'PDF...' : 'PDF'}
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Cerrar modal"
+              className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-500 transition hover:border-slate-300 hover:text-slate-900"
+            >
+              <X size={18} strokeWidth={2.2} />
+            </button>
+          </div>
         </div>
 
         {errorMessage ? (
@@ -598,6 +620,8 @@ function InventarioPage() {
   const [isLoadingProductDetail, setIsLoadingProductDetail] = useState(false)
   const [isUpdatingDelivery, setIsUpdatingDelivery] = useState('')
   const [isSubmittingProduct, setIsSubmittingProduct] = useState(false)
+  const [isExportingReport, setIsExportingReport] = useState(false)
+  const [activeExportFormat, setActiveExportFormat] = useState('')
   const [errorMessage, setErrorMessage] = useState('')
   const [productFormError, setProductFormError] = useState('')
   const [productFormValues, setProductFormValues] = useState(emptyProductForm)
@@ -746,6 +770,29 @@ function InventarioPage() {
       )
     } finally {
       setIsUpdatingDelivery('')
+    }
+  }
+
+  const handleExportProductReport = async (format) => {
+    if (!activeProductDetail) {
+      return
+    }
+
+    setIsExportingReport(true)
+    setActiveExportFormat(format)
+    setErrorMessage('')
+
+    try {
+      await downloadInventarioProductoReport(activeProductDetail.id, format)
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : 'No se pudo exportar el reporte del producto.',
+      )
+    } finally {
+      setIsExportingReport(false)
+      setActiveExportFormat('')
     }
   }
 
@@ -1023,10 +1070,6 @@ function InventarioPage() {
               <h2 className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">
                 Productos del inventario
               </h2>
-              <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
-                Cada producto permite consultar reportes y confirmar entregas a
-                colegiados desde un modal conectado al backend.
-              </p>
             </div>
 
             <button
@@ -1207,7 +1250,7 @@ function InventarioPage() {
             </div>
           ) : movements.length > 0 ? (
             <div className="mt-5 space-y-3">
-              {movements.slice(0, 6).map((item) => (
+              {movements.slice(0, 5).map((item) => (
                 <article
                   key={item.id}
                   className="rounded-[22px] border border-slate-200 bg-[#f8fbff] p-3.5"
@@ -1260,6 +1303,9 @@ function InventarioPage() {
             product={activeProductDetail}
             onClose={closeProductModal}
             errorMessage={errorMessage}
+            onExport={handleExportProductReport}
+            isExporting={isExportingReport}
+            activeExportFormat={activeExportFormat}
           />
         ) : (
           <ProductDeliveredModal

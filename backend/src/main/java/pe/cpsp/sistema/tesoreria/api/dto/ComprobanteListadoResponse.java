@@ -12,4 +12,5 @@ public record ComprobanteListadoResponse(
     LocalDate fechaEmision,
     BigDecimal total,
     String estado,
+    String origenOperacion,
     boolean impreso) {}

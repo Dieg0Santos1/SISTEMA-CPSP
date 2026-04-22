@@ -1,6 +1,16 @@
 import { createElement } from 'react'
 
-function MetricCard({ title, value, note, helper, icon, accent, badgeTone }) {
+function MetricCard({
+  title,
+  value,
+  note,
+  helper,
+  icon,
+  accent,
+  badgeTone,
+  valueClassName = '',
+  helperClassName = '',
+}) {
   return (
     <article
       className={`rounded-[26px] border border-slate-200 bg-white p-5 shadow-[0_14px_40px_-30px_rgba(15,23,42,0.5)] ${accent}`}
@@ -16,7 +26,9 @@ function MetricCard({ title, value, note, helper, icon, accent, badgeTone }) {
       </div>
 
       <div className="flex items-end justify-between gap-4">
-        <p className="text-3xl font-bold tracking-tight text-slate-950 sm:text-[2.15rem]">
+        <p
+          className={`text-3xl font-bold tracking-tight text-slate-950 sm:text-[2.15rem] ${valueClassName}`}
+        >
           {value}
         </p>
 
@@ -24,7 +36,9 @@ function MetricCard({ title, value, note, helper, icon, accent, badgeTone }) {
           <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${badgeTone}`}>
             {note}
           </span>
-          <p className="mt-2 max-w-[9rem] text-xs leading-5 text-slate-500">{helper}</p>
+          <p className={`mt-2 max-w-[9rem] text-xs leading-5 text-slate-500 ${helperClassName}`}>
+            {helper}
+          </p>
         </div>
       </div>
     </article>

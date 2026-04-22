@@ -5,6 +5,7 @@ import {
   CheckCheck,
   ChevronRight,
   ClipboardList,
+  Download,
   FileText,
   Plus,
   Search,
@@ -56,6 +57,9 @@ function EventosOverviewPage() {
   const [errorMessage, setErrorMessage] = useState('')
   const [memberSearch, setMemberSearch] = useState('')
   const [participantsPage, setParticipantsPage] = useState(1)
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false)
+  const [isExporting, setIsExporting] = useState(false)
+  const [activeExportFormat, setActiveExportFormat] = useState('')
 
   const loadEvents = async (preferredEventId = null) => {
     setIsLoadingEvents(true)
@@ -191,7 +195,9 @@ function EventosOverviewPage() {
     [events, currentDate],
   )
   const attendedMembersCount = selectedEvent?.asistenciasRegistradas ?? 0
-  const availableMembersCount = selectedEvent?.participantes.length ?? 0
+  const attendedColegiadosCount = selectedEvent?.asistenciasColegiados ?? 0
+  const attendedOthersCount = selectedEvent?.asistenciasExternos ?? 0
+  const availableMembersCount = selectedEvent?.padronDisponible ?? selectedEvent?.participantes.length ?? 0
   const attendancePercent =
     availableMembersCount === 0
       ? 0
@@ -325,6 +331,51 @@ function EventosOverviewPage() {
       )
     } finally {
       setIsUpdatingAttendance('')
+    }
+  }
+
+  const handleExportParticipants = async (format) => {
+    if (!selectedEvent) {
+      return
+    }
+
+    setIsExporting(true)
+    setActiveExportFormat(format)
+    setErrorMessage('')
+
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/eventos/${selectedEvent.id}/export?format=${format}`,
+        { credentials: 'include' },
+      )
+
+      if (!response.ok) {
+        throw new Error(
+          await readErrorMessage(response, 'No se pudo exportar la lista del evento.'),
+        )
+      }
+
+      const blob = await response.blob()
+      const contentDisposition = response.headers.get('content-disposition') ?? ''
+      const filenameMatch = contentDisposition.match(/filename="?([^"]+)"?/)
+      const filename =
+        filenameMatch?.[1] ??
+        `evento-${selectedEvent.nombre}.${format === 'pdf' ? 'pdf' : 'xlsx'}`
+
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = filename
+      link.click()
+      URL.revokeObjectURL(url)
+      setIsExportModalOpen(false)
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : 'No se pudo exportar la lista del evento.',
+      )
+    } finally {
+      setIsExporting(false)
+      setActiveExportFormat('')
     }
   }
 
@@ -506,7 +557,7 @@ function EventosOverviewPage() {
                   </div>
                 </div>
 
-                <div className="mt-5 grid gap-4 lg:grid-cols-3">
+                <div className="mt-5 grid gap-4 lg:grid-cols-2 2xl:grid-cols-4">
                   <article className="rounded-[24px] border border-slate-200 bg-[#f8fbff] p-4">
                     <div className="flex items-center gap-3">
                       <div className="rounded-2xl bg-cobalt-soft p-3 text-cobalt">
@@ -514,7 +565,39 @@ function EventosOverviewPage() {
                       </div>
                       <div>
                         <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">
-                          Asistencias registradas
+                          Colegiados asistentes
+                        </p>
+                        <p className="mt-1 text-2xl font-bold text-slate-950">
+                          {attendedColegiadosCount}
+                        </p>
+                      </div>
+                    </div>
+                  </article>
+
+                  <article className="rounded-[24px] border border-slate-200 bg-[#f8fbff] p-4">
+                    <div className="flex items-center gap-3">
+                      <div className="rounded-2xl bg-violet-100 p-3 text-violet-700">
+                        <FileText size={18} strokeWidth={2.2} />
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">
+                          Otros asistentes
+                        </p>
+                        <p className="mt-1 text-2xl font-bold text-slate-950">
+                          {attendedOthersCount}
+                        </p>
+                      </div>
+                    </div>
+                  </article>
+
+                  <article className="rounded-[24px] border border-slate-200 bg-[#f8fbff] p-4">
+                    <div className="flex items-center gap-3">
+                      <div className="rounded-2xl bg-cobalt-soft p-3 text-cobalt">
+                        <ClipboardList size={18} strokeWidth={2.2} />
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">
+                          Total asistentes
                         </p>
                         <p className="mt-1 text-2xl font-bold text-slate-950">
                           {attendedMembersCount}
@@ -530,7 +613,7 @@ function EventosOverviewPage() {
                       </div>
                       <div>
                         <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">
-                          Porcentaje de asistencia
+                          Porcentaje asistencia
                         </p>
                         <p className="mt-1 text-2xl font-bold text-slate-950">
                           {attendancePercent}%
@@ -538,38 +621,33 @@ function EventosOverviewPage() {
                       </div>
                     </div>
                   </article>
-
-                  <article className="rounded-[24px] border border-slate-200 bg-[#f8fbff] p-4">
-                    <div className="flex items-center gap-3">
-                      <div className="rounded-2xl bg-amber-100 p-3 text-amber-700">
-                        <FileText size={18} strokeWidth={2.2} />
-                      </div>
-                      <div>
-                        <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">
-                          Padron disponible
-                        </p>
-                        <p className="mt-1 text-2xl font-bold text-slate-950">
-                          {availableMembersCount}
-                        </p>
-                      </div>
-                    </div>
-                  </article>
                 </div>
 
                 <div className="mt-6">
-                  <label className="group flex w-full items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 transition focus-within:border-cobalt focus-within:bg-white">
-                    <Search
-                      size={18}
-                      className="text-slate-400 transition group-focus-within:text-cobalt"
-                    />
-                    <input
-                      type="search"
-                      value={memberSearch}
-                      onChange={(event) => setMemberSearch(event.target.value)}
-                      placeholder="Buscar participante por codigo, nombre o DNI"
-                      className="w-full bg-transparent text-sm font-medium text-slate-700 outline-none placeholder:text-slate-400"
-                    />
-                  </label>
+                  <div className="flex flex-col gap-3 lg:flex-row">
+                    <label className="group flex w-full items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 transition focus-within:border-cobalt focus-within:bg-white">
+                      <Search
+                        size={18}
+                        className="text-slate-400 transition group-focus-within:text-cobalt"
+                      />
+                      <input
+                        type="search"
+                        value={memberSearch}
+                        onChange={(event) => setMemberSearch(event.target.value)}
+                        placeholder="Buscar participante por codigo, nombre o DNI"
+                        className="w-full bg-transparent text-sm font-medium text-slate-700 outline-none placeholder:text-slate-400"
+                      />
+                    </label>
+
+                    <button
+                      type="button"
+                      onClick={() => setIsExportModalOpen(true)}
+                      className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:border-slate-300"
+                    >
+                      <Download size={16} strokeWidth={2.1} />
+                      Exportar lista
+                    </button>
+                  </div>
                 </div>
 
                 <div className="mt-4 overflow-hidden rounded-[26px] border border-slate-200">
@@ -807,6 +885,69 @@ function EventosOverviewPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      ) : null}
+
+      {isExportModalOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 px-4 py-8 backdrop-blur-sm">
+          <div className="w-full max-w-xl rounded-[32px] border border-white/80 bg-white shadow-[0_24px_70px_-36px_rgba(15,23,42,0.8)]">
+            <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-6 py-5 sm:px-8">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.24em] text-cobalt">
+                  Reporte institucional
+                </p>
+                <h2 className="mt-2 text-2xl font-bold tracking-tight text-slate-950">
+                  Exportar lista del evento
+                </h2>
+                <p className="mt-2 text-sm leading-6 text-slate-600">
+                  Descarga la lista de participantes con estructura formal y logo institucional.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  if (!isExporting) {
+                    setIsExportModalOpen(false)
+                  }
+                }}
+                aria-label="Cerrar exportacion"
+                className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-500 transition hover:border-slate-300 hover:text-slate-900"
+              >
+                <X size={18} strokeWidth={2.2} />
+              </button>
+            </div>
+
+            <div className="grid gap-3 px-6 py-6 sm:grid-cols-2 sm:px-8">
+              <button
+                type="button"
+                onClick={() => handleExportParticipants('xlsx')}
+                disabled={isExporting}
+                className="inline-flex min-h-[88px] flex-col items-start justify-center rounded-[24px] border border-slate-200 bg-white px-5 py-4 text-left transition hover:border-cobalt hover:bg-[#f8fbff] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <span className="text-xs font-bold uppercase tracking-[0.22em] text-emerald-600">
+                  Excel
+                </span>
+                <span className="mt-2 text-lg font-semibold text-slate-950">
+                  {activeExportFormat === 'xlsx' ? 'Generando Excel...' : 'Exportar como Excel'}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleExportParticipants('pdf')}
+                disabled={isExporting}
+                className="inline-flex min-h-[88px] flex-col items-start justify-center rounded-[24px] border border-slate-200 bg-white px-5 py-4 text-left transition hover:border-cobalt hover:bg-[#f8fbff] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <span className="text-xs font-bold uppercase tracking-[0.22em] text-cobalt">
+                  PDF
+                </span>
+                <span className="mt-2 text-lg font-semibold text-slate-950">
+                  {activeExportFormat === 'pdf' ? 'Generando PDF...' : 'Exportar como PDF'}
+                </span>
+              </button>
+            </div>
           </div>
         </div>
       ) : null}

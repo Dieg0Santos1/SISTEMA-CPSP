@@ -20,6 +20,9 @@ import org.springframework.transaction.annotation.Transactional;
 import pe.cpsp.sistema.colegiados.domain.model.Colegiado;
 import pe.cpsp.sistema.colegiados.infrastructure.persistence.repository.ColegiadoRepository;
 import pe.cpsp.sistema.common.exception.InvalidRequestException;
+import pe.cpsp.sistema.inventario.api.dto.InventarioRegistrarVentaItemRequest;
+import pe.cpsp.sistema.inventario.api.dto.InventarioRegistrarVentaRequest;
+import pe.cpsp.sistema.inventario.application.InventarioService;
 import pe.cpsp.sistema.tesoreria.api.dto.ConceptoCobroDeleteResponse;
 import pe.cpsp.sistema.tesoreria.api.dto.ConceptoCobroCatalogoResponse;
 import pe.cpsp.sistema.tesoreria.api.dto.CobranzaColegiadoDetailResponse;
@@ -45,6 +48,8 @@ class TesoreriaCobroIntegrationTests {
   @Autowired private TesoreriaQueryService tesoreriaQueryService;
 
   @Autowired private TesoreriaFraccionamientoService tesoreriaFraccionamientoService;
+
+  @Autowired private InventarioService inventarioService;
 
   @Autowired private ConceptoCobroAdminService conceptoCobroAdminService;
 
@@ -498,6 +503,35 @@ class TesoreriaCobroIntegrationTests {
     tesoreriaCobroService.marcarImpreso(response.cobroId());
 
     assertThat(cobroRepository.findById(response.cobroId()).orElseThrow().isImpreso()).isTrue();
+  }
+
+  @Test
+  void resumenHistorialYComprobantesIncluyenVentasDeInventario() {
+    inventarioService.registrarVenta(
+        new InventarioRegistrarVentaRequest(
+            "COLEGIADO",
+            1L,
+            "EFECTIVO",
+            LocalDate.of(2026, 8, 20),
+            "Venta integrada a tesoreria",
+            List.of(new InventarioRegistrarVentaItemRequest(1L, 1))));
+
+    var resumen = tesoreriaQueryService.getResumen();
+    var historial = tesoreriaQueryService.getHistorial("Flor", "Todos", 1, 10);
+    var comprobantes = tesoreriaQueryService.getComprobantes("Flor", "Todos", "Todos", 1, 10);
+
+    assertThat(resumen.operacionesDia()).isPositive();
+    assertThat(resumen.comprobantesEmitidos()).isPositive();
+    assertThat(resumen.ultimasOperaciones())
+        .anySatisfy(
+            operacion -> {
+              assertThat(operacion.origenOperacion()).isEqualTo("VENTA_PRODUCTO");
+              assertThat(operacion.conceptoResumen()).contains("Venta de productos");
+            });
+    assertThat(historial.rows().content())
+        .anySatisfy(operacion -> assertThat(operacion.origenOperacion()).isEqualTo("VENTA_PRODUCTO"));
+    assertThat(comprobantes.rows().content())
+        .anySatisfy(comprobante -> assertThat(comprobante.origenOperacion()).isEqualTo("VENTA_PRODUCTO"));
   }
 
   @Test

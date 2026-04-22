@@ -19,4 +19,5 @@ public record InventarioVentaResponse(
     LocalDate fechaVenta,
     String observacion,
     BigDecimal total,
+    boolean impreso,
     List<InventarioVentaItemResponse> items) {}

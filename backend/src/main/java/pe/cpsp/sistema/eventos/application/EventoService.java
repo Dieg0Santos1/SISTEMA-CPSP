@@ -187,12 +187,22 @@ public class EventoService {
 
     participantes.sort(java.util.Comparator.comparing(EventoAttendanceMemberResponse::nombreCompleto));
 
+    int asistenciasColegiados = (int) participantes.stream()
+        .filter(participante -> "COLEGIADO".equals(participante.tipoRegistro()) && participante.asistio())
+        .count();
+    int asistenciasExternos = (int) participantes.stream()
+        .filter(participante -> "EXTERNO".equals(participante.tipoRegistro()) && participante.asistio())
+        .count();
+
     return new EventoDetailResponse(
         evento.getId(),
         evento.getNombre(),
         evento.getDescripcion(),
         evento.getFechaHora(),
         evento.getAsistencias().size(),
+        asistenciasColegiados,
+        asistenciasExternos,
+        participantes.size(),
         participantes);
   }
 

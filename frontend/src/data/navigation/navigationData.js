@@ -16,7 +16,7 @@ export const navigationItems = [
   { label: 'Colegiados', icon: Users, path: '/colegiados' },
   { label: 'Caja y Cobros', icon: CreditCard, path: '/caja-cobros' },
   { label: 'Conceptos de Cobro', icon: FileText, path: '/conceptos-cobro' },
-  { label: 'Reportes', icon: BarChart3 },
+  { label: 'Reportes', icon: BarChart3, path: '/reportes' },
   { label: 'Eventos', icon: CalendarDays, path: '/eventos' },
   { label: 'Inventario', icon: FolderKanban, path: '/inventario' },
   { label: 'Elecciones', icon: Vote, path: '/elecciones' },

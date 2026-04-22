@@ -8,7 +8,7 @@ import pe.cpsp.sistema.inventario.domain.model.InventarioMovimiento;
 
 public interface InventarioMovimientoRepository extends JpaRepository<InventarioMovimiento, Long> {
 
-  List<InventarioMovimiento> findTop20ByOrderByFechaMovimientoDesc();
+  List<InventarioMovimiento> findTop5ByOrderByFechaMovimientoDesc();
 
   @Query(
       """

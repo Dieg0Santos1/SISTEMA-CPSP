@@ -12,6 +12,7 @@ import {
 import {
   createTesoreriaConceptoCobro,
   deleteTesoreriaConceptoCobro,
+  downloadTesoreriaConceptosCatalogoReport,
   getTesoreriaConceptosCobroCatalogo,
   updateTesoreriaConceptoCobro,
 } from '../services/tesoreriaApi'
@@ -578,6 +579,9 @@ function ConceptosPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [editingConceptId, setEditingConceptId] = useState(null)
   const [deleteTarget, setDeleteTarget] = useState(null)
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false)
+  const [isExporting, setIsExporting] = useState(false)
+  const [activeExportFormat, setActiveExportFormat] = useState('')
   const pageSize = 4
 
   async function loadCatalog() {
@@ -773,26 +777,20 @@ function ConceptosPage() {
     }
   }
 
-  function exportCatalog() {
-    const rows = filteredConcepts.map((concept) =>
-      [
-        concept.codigo,
-        formatConceptTypeLabel(concept.tipoConcepto),
-        concept.nombre,
-        formatCategoryLabel(concept.categoria),
-        `"${formatConceptAmount(concept)}"`,
-        formatStatusLabel(concept.estado),
-      ].join(','),
-    )
+  async function exportCatalog(format) {
+    setIsExporting(true)
+    setActiveExportFormat(format)
+    setErrorMessage('')
 
-    const csv = ['codigo,tipo,nombre,categoria,monto,estado', ...rows].join('\n')
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = 'conceptos-cobro.csv'
-    link.click()
-    URL.revokeObjectURL(url)
+    try {
+      await downloadTesoreriaConceptosCatalogoReport({ format })
+      setIsExportModalOpen(false)
+    } catch (error) {
+      setErrorMessage(error.message)
+    } finally {
+      setIsExporting(false)
+      setActiveExportFormat('')
+    }
   }
 
   const summaryCards = buildSummaryCards(summary)
@@ -819,7 +817,7 @@ function ConceptosPage() {
         <div className="flex flex-col gap-3 sm:flex-row">
           <button
             type="button"
-            onClick={exportCatalog}
+            onClick={() => setIsExportModalOpen(true)}
             className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:border-slate-300"
           >
             <Download size={16} strokeWidth={2.1} />
@@ -839,6 +837,69 @@ function ConceptosPage() {
       {feedbackMessage ? (
         <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
           {feedbackMessage}
+        </div>
+      ) : null}
+
+      {isExportModalOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 px-4 py-8 backdrop-blur-sm">
+          <div className="w-full max-w-xl rounded-[32px] border border-white/80 bg-white shadow-[0_24px_70px_-36px_rgba(15,23,42,0.8)]">
+            <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-6 py-5 sm:px-8">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.24em] text-cobalt">
+                  Reporte institucional
+                </p>
+                <h3 className="mt-2 text-2xl font-bold tracking-tight text-slate-950">
+                  Exportar catalogo de conceptos
+                </h3>
+                <p className="mt-2 text-sm leading-6 text-slate-600">
+                  Descarga el catalogo con logo y estructura formal para revision administrativa.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  if (!isExporting) {
+                    setIsExportModalOpen(false)
+                  }
+                }}
+                aria-label="Cerrar exportacion"
+                className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-500 transition hover:border-slate-300 hover:text-slate-900"
+              >
+                <X size={18} strokeWidth={2.2} />
+              </button>
+            </div>
+
+            <div className="grid gap-3 px-6 py-6 sm:grid-cols-2 sm:px-8">
+              <button
+                type="button"
+                onClick={() => exportCatalog('xlsx')}
+                disabled={isExporting}
+                className="inline-flex min-h-[88px] flex-col items-start justify-center rounded-[24px] border border-slate-200 bg-white px-5 py-4 text-left transition hover:border-cobalt hover:bg-[#f8fbff] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <span className="text-xs font-bold uppercase tracking-[0.22em] text-emerald-600">
+                  Excel
+                </span>
+                <span className="mt-2 text-lg font-semibold text-slate-950">
+                  {activeExportFormat === 'xlsx' ? 'Generando Excel...' : 'Exportar como Excel'}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => exportCatalog('pdf')}
+                disabled={isExporting}
+                className="inline-flex min-h-[88px] flex-col items-start justify-center rounded-[24px] border border-slate-200 bg-white px-5 py-4 text-left transition hover:border-cobalt hover:bg-[#f8fbff] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <span className="text-xs font-bold uppercase tracking-[0.22em] text-cobalt">
+                  PDF
+                </span>
+                <span className="mt-2 text-lg font-semibold text-slate-950">
+                  {activeExportFormat === 'pdf' ? 'Generando PDF...' : 'Exportar como PDF'}
+                </span>
+              </button>
+            </div>
+          </div>
         </div>
       ) : null}
 

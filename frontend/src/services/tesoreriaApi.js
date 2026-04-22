@@ -47,6 +47,27 @@ async function requestJson(path, options = {}) {
   return responseBody
 }
 
+async function requestFile(path, options = {}) {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    credentials: 'include',
+    ...options,
+  })
+
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || 'No se pudo completar la solicitud.')
+  }
+
+  const blob = await response.blob()
+  const contentDisposition = response.headers.get('content-disposition') ?? ''
+  const filenameMatch = contentDisposition.match(/filename="?([^"]+)"?/)
+
+  return {
+    blob,
+    filename: filenameMatch?.[1] ?? 'comprobante.pdf',
+  }
+}
+
 export async function getTesoreriaResumen() {
   return requestJson('/tesoreria/resumen')
 }
@@ -82,6 +103,17 @@ export async function getTesoreriaConceptosCobroCatalogo() {
   return requestJson('/tesoreria/conceptos-cobro/catalogo')
 }
 
+export async function downloadTesoreriaConceptosCatalogoReport({ format = 'pdf' } = {}) {
+  const file = await requestFile(`/tesoreria/conceptos-cobro/catalogo/export${buildQuery({ format })}`)
+
+  const url = URL.createObjectURL(file.blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = file.filename
+  link.click()
+  URL.revokeObjectURL(url)
+}
+
 export async function createTesoreriaConceptoCobro(payload) {
   return requestJson('/tesoreria/conceptos-cobro', {
     method: 'POST',
@@ -109,6 +141,14 @@ export async function postTesoreriaCobro(payload) {
   })
 }
 
+export async function getTesoreriaCobroDetail(cobroId) {
+  return requestJson(`/tesoreria/cobros/${cobroId}`)
+}
+
+export async function getTesoreriaCobroPdf(cobroId) {
+  return requestFile(`/tesoreria/cobros/${cobroId}/pdf`)
+}
+
 export async function markTesoreriaCobroPrinted(cobroId) {
   return requestJson(`/tesoreria/cobros/${cobroId}/impresion`, {
     method: 'PATCH',
@@ -126,6 +166,23 @@ export async function getTesoreriaHistorial({
   )
 }
 
+export async function downloadTesoreriaHistorialReport({
+  search = '',
+  metodoPago = 'Todos',
+  format = 'pdf',
+} = {}) {
+  const file = await requestFile(
+    `/tesoreria/historial/export${buildQuery({ search, metodoPago, format })}`,
+  )
+
+  const url = URL.createObjectURL(file.blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = file.filename
+  link.click()
+  URL.revokeObjectURL(url)
+}
+
 export async function getTesoreriaComprobantes({
   search = '',
   printStatus = 'Todos',
@@ -136,4 +193,22 @@ export async function getTesoreriaComprobantes({
   return requestJson(
     `/tesoreria/comprobantes${buildQuery({ search, printStatus, tipo, page, size })}`,
   )
+}
+
+export async function downloadTesoreriaComprobantesReport({
+  search = '',
+  printStatus = 'Todos',
+  tipo = 'Todos',
+  format = 'pdf',
+} = {}) {
+  const file = await requestFile(
+    `/tesoreria/comprobantes/export${buildQuery({ search, printStatus, tipo, format })}`,
+  )
+
+  const url = URL.createObjectURL(file.blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = file.filename
+  link.click()
+  URL.revokeObjectURL(url)
 }

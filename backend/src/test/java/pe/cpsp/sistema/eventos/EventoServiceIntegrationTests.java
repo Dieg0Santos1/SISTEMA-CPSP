@@ -30,14 +30,14 @@ class EventoServiceIntegrationTests {
                 LocalTime.of(18, 45),
                 "Espacio de intercambio para colegiados habilitados y nuevas comisiones."));
 
-    EventoDetailResponse updated = eventoService.registrarAsistencia(created.id(), 1L);
+    EventoDetailResponse updated = eventoService.registrarAsistencia(created.id(), 1L, "COLEGIADO");
 
     assertThat(updated.nombre()).isEqualTo("Foro de integracion profesional");
     assertThat(updated.asistenciasRegistradas()).isEqualTo(1);
-    assertThat(updated.colegiados())
+    assertThat(updated.participantes())
         .anySatisfy(
             member -> {
-              assertThat(member.colegiadoId()).isEqualTo(1L);
+              assertThat(member.personaId()).isEqualTo(1L);
               assertThat(member.asistio()).isTrue();
             });
   }

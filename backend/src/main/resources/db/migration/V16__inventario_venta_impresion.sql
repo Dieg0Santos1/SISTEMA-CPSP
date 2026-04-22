@@ -1,0 +1,2 @@
+ALTER TABLE inventario_venta
+    ADD COLUMN impreso BOOLEAN NOT NULL DEFAULT FALSE;
