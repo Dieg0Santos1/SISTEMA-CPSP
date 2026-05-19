@@ -208,6 +208,7 @@ public class TesoreriaCobroService {
     cobro.setDetalles(detalles);
 
     Cobro saved = cobroRepository.save(cobro);
+    assignCodigoColegiaturaIfHabilitado(saved);
     cuotasPagadasEnCobro.stream()
         .map(FraccionamientoCuota::getFraccionamiento)
         .distinct()
@@ -216,6 +217,42 @@ public class TesoreriaCobroService {
     comprobanteSerieRepository.save(serie);
 
     return toResponse(saved);
+  }
+
+  private void assignCodigoColegiaturaIfHabilitado(Cobro cobro) {
+    Colegiado colegiado = cobro.getColegiado();
+
+    if (colegiado.getCodigoColegiatura() != null && !colegiado.getCodigoColegiatura().isBlank()) {
+      return;
+    }
+
+    boolean habilita =
+        cobro.getFechaPago() != null
+            && !LocalDate.now(appClock).isAfter(cobro.getFechaPago().plusMonths(3))
+            && cobro.getDetalles().stream()
+                .map(CobroDetalle::getConceptoCobro)
+                .filter(Objects::nonNull)
+                .anyMatch(ConceptoCobro::isAfectaHabilitacion);
+
+    if (!habilita) {
+      return;
+    }
+
+    colegiado.setCodigoColegiatura(generateNextCodigoColegiatura());
+    colegiadoRepository.save(colegiado);
+  }
+
+  private String generateNextCodigoColegiatura() {
+    int maxNumber =
+        colegiadoRepository.findAllCodigosColegiatura().stream()
+            .filter(Objects::nonNull)
+            .map(String::trim)
+            .filter(code -> code.matches("(?i)CPL-\\d+"))
+            .mapToInt(code -> Integer.parseInt(code.substring(code.indexOf('-') + 1)))
+            .max()
+            .orElse(0);
+
+    return "CPL-" + String.format("%05d", maxNumber + 1);
   }
 
   @Transactional(readOnly = true)

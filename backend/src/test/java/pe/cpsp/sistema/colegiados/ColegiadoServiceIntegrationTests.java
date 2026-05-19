@@ -83,7 +83,7 @@ class ColegiadoServiceIntegrationTests {
     assertThat(created.email()).isEqualTo("maria@correo.com");
     assertThat(created.estado()).isEqualTo("NO_HABILITADO");
     assertThat(created.fechaIniciacion()).isEqualTo(LocalDate.of(2026, 7, 15));
-    assertThat(created.codigoColegiatura()).startsWith("CPL-");
+    assertThat(created.codigoColegiatura()).isNull();
   }
 
   @Test

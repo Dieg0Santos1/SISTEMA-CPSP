@@ -96,7 +96,6 @@ public class ColegiadoService {
 
     Colegiado colegiado = new Colegiado();
     applyRequest(colegiado, request);
-    colegiado.setCodigoColegiatura(generateNextCodigoColegiatura());
     colegiado.setEstado(ESTADO_NO_HABILITADO);
 
     Colegiado saved = colegiadoRepository.save(colegiado);
@@ -186,19 +185,6 @@ public class ColegiadoService {
               throw new DuplicateResourceException(
                   "Ya existe un colegiado registrado con el DNI indicado.");
             });
-  }
-
-  private String generateNextCodigoColegiatura() {
-    int maxNumber =
-        colegiadoRepository.findAllCodigosColegiatura().stream()
-            .filter(Objects::nonNull)
-            .map(String::trim)
-            .filter(code -> code.matches("(?i)CPL-\\d+"))
-            .mapToInt(code -> Integer.parseInt(code.substring(code.indexOf('-') + 1)))
-            .max()
-            .orElse(0);
-
-    return "CPL-" + String.format("%05d", maxNumber + 1);
   }
 
   private Map<Long, HabilitacionInfo> buildHabilitacionMap() {

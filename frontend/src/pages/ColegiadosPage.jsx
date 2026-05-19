@@ -121,6 +121,8 @@ const formatRecordTypeLabel = (recordType) =>
 
 const normalizeDniInput = (value) => value.replace(/\D/g, '').slice(0, 8)
 
+const normalizeRucInput = (value) => value.replace(/\D/g, '').slice(0, 11)
+
 const normalizeCelularInput = (value) => {
   const digits = value.replace(/\D/g, '')
 
@@ -167,7 +169,7 @@ const buildVigenciaLabel = (colegiado) => {
 const mapColegiadoToRow = (colegiado) => ({
   recordType: 'COLEGIADO',
   id: colegiado.id,
-  code: colegiado.codigoColegiatura,
+  code: colegiado.codigoColegiatura ?? 'Pendiente',
   dni: colegiado.dni,
   name: colegiado.nombreCompleto,
   nombres: colegiado.nombre,
@@ -536,6 +538,10 @@ function ColegiadosPage() {
 
     if (name === 'dni') {
       value = normalizeDniInput(value)
+    }
+
+    if (name === 'ruc') {
+      value = normalizeRucInput(value)
     }
 
     if (name === 'celular') {
@@ -1550,6 +1556,7 @@ function ColegiadosPage() {
                           name="ruc"
                           value={formValues.ruc}
                           onChange={handleInputChange}
+                          maxLength={11}
                           placeholder="Ingrese su RUC si aplica"
                           className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-cobalt"
                         />
@@ -1575,6 +1582,7 @@ function ColegiadosPage() {
                           name="direccion"
                           value={formValues.direccion}
                           onChange={handleInputChange}
+                          required
                           placeholder="Direccion del colegiado"
                           className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-cobalt"
                         />

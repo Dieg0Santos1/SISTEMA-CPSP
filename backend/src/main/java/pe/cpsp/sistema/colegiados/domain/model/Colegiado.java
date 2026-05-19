@@ -41,7 +41,7 @@ public class Colegiado extends AuditableEntity {
   @Column(nullable = false, unique = true, length = 12)
   private String dni;
 
-  @Column(name = "codigo_colegiatura", nullable = false, unique = true, length = 20)
+  @Column(name = "codigo_colegiatura", unique = true, length = 20)
   private String codigoColegiatura;
 
   @Column(nullable = false, length = 30)

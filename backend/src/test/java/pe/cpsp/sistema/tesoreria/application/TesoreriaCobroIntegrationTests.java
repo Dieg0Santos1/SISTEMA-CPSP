@@ -119,6 +119,29 @@ class TesoreriaCobroIntegrationTests {
   }
 
   @Test
+  void payingCurrentHabilitationConceptAssignsCodigoColegiatura() {
+    Colegiado colegiado = saveColegiado("99000029", null, null);
+    Long ceremoniaConceptId = findConceptId("CER-JUR");
+
+    RegistrarCobroResponse response =
+        tesoreriaCobroService.registrarCobro(
+            new RegistrarCobroRequest(
+                colegiado.getId(),
+                "BOLETA",
+                LocalDate.of(2026, 8, 20),
+                "EFECTIVO",
+                "Pago de ceremonia",
+                List.of(
+                    new RegistrarCobroItemRequest(
+                        ceremoniaConceptId, null, null, 1, BigDecimal.ZERO, BigDecimal.ZERO))));
+
+    Colegiado saved = colegiadoRepository.findById(colegiado.getId()).orElseThrow();
+
+    assertThat(response.codigoColegiatura()).startsWith("CPL-");
+    assertThat(saved.getCodigoColegiatura()).isEqualTo(response.codigoColegiatura());
+  }
+
+  @Test
   void canRegisterAdvanceMonthlyPaymentsIntoNextYear() {
     Colegiado colegiado = saveColegiado("99000010", "CPL-99010", "20188999001");
     Long ceremoniaConceptId = findConceptId("CER-JUR");
