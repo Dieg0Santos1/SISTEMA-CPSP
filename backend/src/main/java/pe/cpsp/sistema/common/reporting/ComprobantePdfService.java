@@ -52,7 +52,17 @@ public class ComprobantePdfService {
       addMetadataTable(
           document,
           "Fecha de emision", formatDate(receipt.fechaEmision()),
-          "Metodo de pago", safe(receipt.metodoPago()));
+          "Fecha de pago", formatDate(receipt.fechaPago()));
+
+      addMetadataTable(
+          document,
+          "Metodo de pago", safe(receipt.metodoPago()),
+          "Estado", "EMITIDO");
+
+      addMetadataTable(
+          document,
+          "Area", formatArea(receipt.areaCodigo(), receipt.areaNombre()),
+          "Generado por", safe(receipt.generadoPor()));
 
       addCustomerTable(
           document,
@@ -328,6 +338,16 @@ public class ComprobantePdfService {
 
   private String formatDate(LocalDate value) {
     return value != null ? value.format(DATE_FORMAT) : "-";
+  }
+
+  private String formatArea(String codigo, String nombre) {
+    String safeCodigo = safe(codigo, "");
+    String safeNombre = safe(nombre, "");
+    if (safeCodigo.isBlank() && safeNombre.isBlank()) {
+      return "-";
+    }
+
+    return (safeCodigo + " " + safeNombre).trim();
   }
 
   private String formatMoney(BigDecimal value) {

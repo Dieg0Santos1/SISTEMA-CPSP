@@ -111,6 +111,10 @@ class ColegiadoServiceIntegrationTests {
             origen,
             metodo_pago,
             fecha_emision,
+            fecha_pago,
+            area_codigo,
+            area_nombre,
+            generado_por,
             subtotal,
             descuento_total,
             mora_total,
@@ -118,10 +122,11 @@ class ColegiadoServiceIntegrationTests {
             observacion,
             estado
         )
-        VALUES (?, 'BOLETA', 'B001', ?, 'CAJA', 'EFECTIVO', ?, 40.00, 0.00, 0.00, 40.00, 'Prueba de vigencia', 'PAGADO')
+        VALUES (?, 'BOLETA', 'B001', ?, 'CAJA', 'EFECTIVO', ?, ?, '001', 'Tesoreria', 'Prueba', 40.00, 0.00, 0.00, 40.00, 'Prueba de vigencia', 'PAGADO')
         """,
         colegiadoId,
         99000 + colegiadoId.intValue(),
+        fechaPago,
         fechaPago);
 
     Long cobroId =

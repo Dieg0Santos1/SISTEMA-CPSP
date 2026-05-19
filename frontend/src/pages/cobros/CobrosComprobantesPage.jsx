@@ -58,6 +58,12 @@ function downloadPdfFile(filename, blob) {
 
 function CobrosComprobantesPage() {
   const [searchTerm, setSearchTerm] = useState('')
+  const [dateFilters, setDateFilters] = useState({
+    fechaEmisionDesde: '',
+    fechaEmisionHasta: '',
+    fechaPagoDesde: '',
+    fechaPagoHasta: '',
+  })
   const [currentPage, setCurrentPage] = useState(1)
   const [activeSeriesIndex, setActiveSeriesIndex] = useState(0)
   const [data, setData] = useState(null)
@@ -78,6 +84,7 @@ function CobrosComprobantesPage() {
       try {
         const response = await getTesoreriaComprobantes({
           search: searchTerm,
+          ...dateFilters,
           page: currentPage,
           size: 5,
         })
@@ -108,7 +115,7 @@ function CobrosComprobantesPage() {
     return () => {
       isMounted = false
     }
-  }, [currentPage, searchTerm])
+  }, [currentPage, dateFilters, searchTerm])
 
   const summaryCards = useMemo(
     () => [
@@ -153,6 +160,7 @@ function CobrosComprobantesPage() {
         search: searchTerm,
         printStatus: 'Todos',
         tipo: 'Todos',
+        ...dateFilters,
         format,
       })
       setIsExportModalOpen(false)
@@ -252,6 +260,21 @@ function CobrosComprobantesPage() {
     }
   }
 
+  function updateDateFilter(name, value) {
+    setDateFilters((current) => ({ ...current, [name]: value }))
+    setCurrentPage(1)
+  }
+
+  function clearDateFilters() {
+    setDateFilters({
+      fechaEmisionDesde: '',
+      fechaEmisionHasta: '',
+      fechaPagoDesde: '',
+      fechaPagoHasta: '',
+    })
+    setCurrentPage(1)
+  }
+
   return (
     <div className="space-y-6">
       <section className="grid gap-4 md:grid-cols-2 md:items-start xl:grid-cols-4 xl:items-start">
@@ -343,42 +366,72 @@ function CobrosComprobantesPage() {
       </section>
 
       <section className="rounded-[30px] border border-white/80 bg-white p-5 shadow-[0_18px_50px_-38px_rgba(15,23,42,0.7)] sm:p-6">
-        <div className="flex flex-col gap-4 border-b border-slate-200 pb-4 xl:flex-row xl:items-center xl:justify-between">
-          <div>
-            <h2 className="text-2xl font-semibold tracking-tight text-slate-950">
-              Comprobantes emitidos
-            </h2>
-            <p className="mt-1 text-sm text-slate-500">
-              Control de documentos emitidos, disponibles para impresion o descarga.
-            </p>
+        <div className="flex flex-col gap-4 border-b border-slate-200 pb-4">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+            <div>
+              <h2 className="text-2xl font-semibold tracking-tight text-slate-950">
+                Comprobantes emitidos
+              </h2>
+              <p className="mt-1 text-sm text-slate-500">
+                Control de documentos emitidos, disponibles para impresion o descarga.
+              </p>
+            </div>
+
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <label className="group flex w-full min-w-[280px] items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 transition focus-within:border-cobalt focus-within:bg-white">
+                <Search
+                  size={18}
+                  className="text-slate-400 transition group-focus-within:text-cobalt"
+                />
+                <input
+                  type="search"
+                  value={searchTerm}
+                  onChange={(event) => {
+                    setSearchTerm(event.target.value)
+                    setCurrentPage(1)
+                  }}
+                  placeholder="Buscar por comprobante, serie o comprador"
+                  className="w-full bg-transparent text-sm font-medium text-slate-700 outline-none placeholder:text-slate-400"
+                />
+              </label>
+
+              <button
+                type="button"
+                onClick={() => setIsExportModalOpen(true)}
+                disabled={isExporting}
+                className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:border-slate-300"
+              >
+                <Download size={16} strokeWidth={2.1} />
+                {isExporting ? 'Exportando...' : 'Exportar listado'}
+              </button>
+            </div>
           </div>
 
-          <div className="flex flex-col gap-3 sm:flex-row">
-            <label className="group flex w-full min-w-[280px] items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 transition focus-within:border-cobalt focus-within:bg-white">
-              <Search
-                size={18}
-                className="text-slate-400 transition group-focus-within:text-cobalt"
-              />
-              <input
-                type="search"
-                value={searchTerm}
-                onChange={(event) => {
-                  setSearchTerm(event.target.value)
-                  setCurrentPage(1)
-                }}
-                placeholder="Buscar por comprobante, serie o comprador"
-                className="w-full bg-transparent text-sm font-medium text-slate-700 outline-none placeholder:text-slate-400"
-              />
-            </label>
-
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[repeat(4,minmax(0,1fr))_auto]">
+            {[
+              ['fechaEmisionDesde', 'Emision desde'],
+              ['fechaEmisionHasta', 'Emision hasta'],
+              ['fechaPagoDesde', 'Pago desde'],
+              ['fechaPagoHasta', 'Pago hasta'],
+            ].map(([name, label]) => (
+              <label key={name} className="block">
+                <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                  {label}
+                </span>
+                <input
+                  type="date"
+                  value={dateFilters[name]}
+                  onChange={(event) => updateDateFilter(name, event.target.value)}
+                  className="mt-2 h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm font-semibold text-slate-700 outline-none transition focus:border-cobalt focus:bg-white"
+                />
+              </label>
+            ))}
             <button
               type="button"
-              onClick={() => setIsExportModalOpen(true)}
-              disabled={isExporting}
-              className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:border-slate-300"
+              onClick={clearDateFilters}
+              className="self-end rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-600 transition hover:border-slate-300"
             >
-              <Download size={16} strokeWidth={2.1} />
-              {isExporting ? 'Exportando...' : 'Exportar listado'}
+              Limpiar fechas
             </button>
           </div>
         </div>
@@ -424,6 +477,11 @@ function CobrosComprobantesPage() {
 
                   <div className="mt-4 flex flex-wrap items-center gap-3 text-sm text-slate-500">
                     <span>Emitido {formatDate(receipt.fechaEmision)}</span>
+                    <span>Pagado {formatDate(receipt.fechaPago)}</span>
+                    <span>
+                      Area {receipt.areaCodigo} {receipt.areaNombre}
+                    </span>
+                    <span>Generado por {receipt.generadoPor}</span>
                     <span>Monto {formatCurrency(receipt.total)}</span>
                   </div>
                 </div>

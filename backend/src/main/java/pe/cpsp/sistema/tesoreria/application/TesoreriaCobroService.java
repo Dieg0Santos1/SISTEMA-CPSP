@@ -99,13 +99,14 @@ public class TesoreriaCobroService {
     List<Fraccionamiento> memberFraccionamientos =
         fraccionamientoRepository.findAllByColegiadoIdWithRelations(colegiado.getId());
 
-    LocalDate calculationDate = request.fechaEmision() != null ? request.fechaEmision() : LocalDate.now(appClock);
+    LocalDate emissionDate = request.fechaEmision() != null ? request.fechaEmision() : LocalDate.now(appClock);
+    LocalDate paymentDate = request.fechaPago() != null ? request.fechaPago() : emissionDate;
     TesoreriaSupport.CobranzaProfile profile =
         tesoreriaSupport.buildProfile(
             colegiado,
             memberCobros,
             memberFraccionamientos,
-            calculationDate,
+            paymentDate,
             ceremoniaConcept.getMontoBase(),
             aportacionConcept.getMontoBase());
 
@@ -123,7 +124,11 @@ public class TesoreriaCobroService {
     cobro.setNumeroComprobante(serie.getCorrelativoActual() + 1);
     cobro.setOrigen("CAJA");
     cobro.setMetodoPago(metodoPago);
-    cobro.setFechaEmision(calculationDate);
+    cobro.setFechaEmision(emissionDate);
+    cobro.setFechaPago(paymentDate);
+    cobro.setAreaCodigo(cleanWithFallback(request.areaCodigo(), "001"));
+    cobro.setAreaNombre(cleanWithFallback(request.areaNombre(), "Tesoreria"));
+    cobro.setGeneradoPor(cleanWithFallback(request.generadoPor(), "Caja"));
     cobro.setObservacion(cleanNullable(request.observacion()));
     cobro.setEstado("EMITIDO");
     cobro.setImpreso(false);
@@ -187,7 +192,7 @@ public class TesoreriaCobroService {
       if (cuotaFraccionamiento != null) {
         cuotasPagadasEnCobro.add(cuotaFraccionamiento);
         cuotaFraccionamiento.setCobroDetalle(detalle);
-        cuotaFraccionamiento.setFechaPago(calculationDate);
+        cuotaFraccionamiento.setFechaPago(paymentDate);
         cuotaFraccionamiento.setEstado(EstadoFraccionamientoCuota.PAGADA);
       }
 
@@ -365,6 +370,11 @@ public class TesoreriaCobroService {
     return cleaned.isBlank() ? null : cleaned;
   }
 
+  private String cleanWithFallback(String value, String fallback) {
+    String cleaned = clean(value);
+    return cleaned.isBlank() ? fallback : cleaned;
+  }
+
   private FraccionamientoCuota findPendingCuotaForMember(Long cuotaId, Long colegiadoId) {
     return fraccionamientoRepository.findAllByColegiadoIdWithRelations(colegiadoId).stream()
         .filter(fraccionamiento -> fraccionamiento.getEstado() == EstadoFraccionamiento.ACTIVO)
@@ -399,7 +409,11 @@ public class TesoreriaCobroService {
         cobro.getSerie(),
         cobro.getNumeroComprobante(),
         cobro.getFechaEmision(),
+        cobro.getFechaPago(),
         normalizeMetodoPagoLabel(cobro.getMetodoPago()),
+        cobro.getAreaCodigo(),
+        cobro.getAreaNombre(),
+        cobro.getGeneradoPor(),
         cobro.getObservacion(),
         cobro.getSubtotal(),
         cobro.getDescuentoTotal(),

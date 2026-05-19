@@ -58,6 +58,18 @@ public class Cobro extends AuditableEntity {
   @Column(name = "fecha_emision", nullable = false)
   private LocalDate fechaEmision;
 
+  @Column(name = "fecha_pago", nullable = false)
+  private LocalDate fechaPago;
+
+  @Column(name = "area_codigo", nullable = false, length = 10)
+  private String areaCodigo;
+
+  @Column(name = "area_nombre", nullable = false, length = 80)
+  private String areaNombre;
+
+  @Column(name = "generado_por", nullable = false, length = 120)
+  private String generadoPor;
+
   @Column(nullable = false, precision = 10, scale = 2)
   private BigDecimal subtotal;
 

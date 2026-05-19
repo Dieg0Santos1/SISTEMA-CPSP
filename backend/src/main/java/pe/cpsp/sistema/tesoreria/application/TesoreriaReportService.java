@@ -54,9 +54,24 @@ public class TesoreriaReportService {
     this.appClock = appClock;
   }
 
-  public ReportFile exportHistorial(String search, String metodoPago, String format) {
+  public ReportFile exportHistorial(
+      String search,
+      String metodoPago,
+      LocalDate fechaEmisionDesde,
+      LocalDate fechaEmisionHasta,
+      LocalDate fechaPagoDesde,
+      LocalDate fechaPagoHasta,
+      String format) {
     HistorialPageResponse response =
-        tesoreriaQueryService.getHistorial(search, metodoPago, 1, 5000);
+        tesoreriaQueryService.getHistorial(
+            search,
+            metodoPago,
+            fechaEmisionDesde,
+            fechaEmisionHasta,
+            fechaPagoDesde,
+            fechaPagoHasta,
+            1,
+            5000);
     String normalizedFormat = normalizeFormat(format);
 
     if ("pdf".equals(normalizedFormat)) {
@@ -73,9 +88,25 @@ public class TesoreriaReportService {
   }
 
   public ReportFile exportComprobantes(
-      String search, String printStatus, String tipo, String format) {
+      String search,
+      String printStatus,
+      String tipo,
+      LocalDate fechaEmisionDesde,
+      LocalDate fechaEmisionHasta,
+      LocalDate fechaPagoDesde,
+      LocalDate fechaPagoHasta,
+      String format) {
     ComprobantesPageResponse response =
-        tesoreriaQueryService.getComprobantes(search, printStatus, tipo, 1, 5000);
+        tesoreriaQueryService.getComprobantes(
+            search,
+            printStatus,
+            tipo,
+            fechaEmisionDesde,
+            fechaEmisionHasta,
+            fechaPagoDesde,
+            fechaPagoHasta,
+            1,
+            5000);
     String normalizedFormat = normalizeFormat(format);
 
     if ("pdf".equals(normalizedFormat)) {
@@ -128,21 +159,25 @@ public class TesoreriaReportService {
               new SummaryBox("Ticket promedio", formatMoney(response.ticketPromedio()))));
 
       PdfPTable table =
-          new PdfPTable(new float[] {1.5f, 1.1f, 2.5f, 2.8f, 1.4f, 1.4f, 1.1f, 1.2f});
+          new PdfPTable(new float[] {1.25f, 0.95f, 0.95f, 1.9f, 2.1f, 1.05f, 1.2f, 1.1f, 1.25f, 0.9f, 1.05f});
       table.setWidthPercentage(100);
 
       addHeaderCell(table, "Referencia");
-      addHeaderCell(table, "Fecha");
+      addHeaderCell(table, "Emision");
+      addHeaderCell(table, "Pago");
       addHeaderCell(table, "Persona");
       addHeaderCell(table, "Concepto");
       addHeaderCell(table, "Metodo");
       addHeaderCell(table, "Comprobante");
+      addHeaderCell(table, "Area");
+      addHeaderCell(table, "Generado por");
       addHeaderCell(table, "Estado");
       addHeaderCell(table, "Total");
 
       for (OperacionTesoreriaResponse row : response.rows().content()) {
         table.addCell(buildBodyCell(row.reference()));
         table.addCell(buildBodyCell(formatDate(row.fechaEmision()), Element.ALIGN_CENTER));
+        table.addCell(buildBodyCell(formatDate(row.fechaPago()), Element.ALIGN_CENTER));
         table.addCell(buildBodyCell(row.colegiadoNombre()));
         table.addCell(buildBodyCell(row.conceptoResumen()));
         table.addCell(buildBodyCell(row.metodoPago(), Element.ALIGN_CENTER));
@@ -150,6 +185,8 @@ public class TesoreriaReportService {
             buildBodyCell(
                 row.serie() + "-" + String.format("%07d", row.numeroComprobante()),
                 Element.ALIGN_CENTER));
+        table.addCell(buildBodyCell(formatArea(row.areaCodigo(), row.areaNombre()), Element.ALIGN_CENTER));
+        table.addCell(buildBodyCell(row.generadoPor()));
         table.addCell(buildBodyCell(row.estado(), Element.ALIGN_CENTER));
         table.addCell(buildBodyCell(formatMoney(row.total()), Element.ALIGN_RIGHT));
       }
@@ -182,14 +219,17 @@ public class TesoreriaReportService {
               new SummaryBox("No impresas", String.valueOf(response.noImpresas()))));
 
       PdfPTable table =
-          new PdfPTable(new float[] {1.1f, 1.5f, 1.2f, 2.6f, 1.2f, 1.1f, 1.1f, 1.2f});
+          new PdfPTable(new float[] {0.9f, 1.25f, 1f, 1.9f, 0.95f, 0.95f, 1.1f, 1.25f, 1.05f, 0.95f, 1.05f});
       table.setWidthPercentage(100);
 
       addHeaderCell(table, "Tipo");
       addHeaderCell(table, "Referencia");
       addHeaderCell(table, "Origen");
       addHeaderCell(table, "Persona");
-      addHeaderCell(table, "Fecha");
+      addHeaderCell(table, "Emision");
+      addHeaderCell(table, "Pago");
+      addHeaderCell(table, "Area");
+      addHeaderCell(table, "Generado por");
       addHeaderCell(table, "Estado");
       addHeaderCell(table, "Impreso");
       addHeaderCell(table, "Total");
@@ -206,6 +246,9 @@ public class TesoreriaReportService {
                 Element.ALIGN_CENTER));
         table.addCell(buildBodyCell(row.colegiadoNombre()));
         table.addCell(buildBodyCell(formatDate(row.fechaEmision()), Element.ALIGN_CENTER));
+        table.addCell(buildBodyCell(formatDate(row.fechaPago()), Element.ALIGN_CENTER));
+        table.addCell(buildBodyCell(formatArea(row.areaCodigo(), row.areaNombre()), Element.ALIGN_CENTER));
+        table.addCell(buildBodyCell(row.generadoPor()));
         table.addCell(buildBodyCell(row.estado(), Element.ALIGN_CENTER));
         table.addCell(buildBodyCell(row.impreso() ? "Si" : "No", Element.ALIGN_CENTER));
         table.addCell(buildBodyCell(formatMoney(row.total()), Element.ALIGN_RIGHT));
@@ -234,7 +277,7 @@ public class TesoreriaReportService {
       rowIndex = addKeyValueRow(sheet, rowIndex, "Ultimos 7 dias", formatMoney(response.totalUltimosSieteDias()), "Ticket promedio", formatMoney(response.ticketPromedio()));
       rowIndex++;
 
-      String[] headers = {"Referencia", "Fecha", "Persona", "Concepto", "Metodo", "Comprobante", "Estado", "Total"};
+      String[] headers = {"Referencia", "Fecha emision", "Fecha pago", "Persona", "Concepto", "Metodo", "Comprobante", "Area", "Generado por", "Estado", "Total"};
       CellStyle headerStyle = buildExcelHeaderStyle(workbook);
       CellStyle bodyStyle = buildExcelBodyStyle(workbook);
 
@@ -249,16 +292,19 @@ public class TesoreriaReportService {
         XSSFRow dataRow = sheet.createRow(rowIndex++);
         createBodyCell(dataRow, 0, row.reference(), bodyStyle);
         createBodyCell(dataRow, 1, formatDate(row.fechaEmision()), bodyStyle);
-        createBodyCell(dataRow, 2, row.colegiadoNombre(), bodyStyle);
-        createBodyCell(dataRow, 3, row.conceptoResumen(), bodyStyle);
-        createBodyCell(dataRow, 4, row.metodoPago(), bodyStyle);
+        createBodyCell(dataRow, 2, formatDate(row.fechaPago()), bodyStyle);
+        createBodyCell(dataRow, 3, row.colegiadoNombre(), bodyStyle);
+        createBodyCell(dataRow, 4, row.conceptoResumen(), bodyStyle);
+        createBodyCell(dataRow, 5, row.metodoPago(), bodyStyle);
         createBodyCell(
             dataRow,
-            5,
+            6,
             row.serie() + "-" + String.format("%07d", row.numeroComprobante()),
             bodyStyle);
-        createBodyCell(dataRow, 6, row.estado(), bodyStyle);
-        createBodyCell(dataRow, 7, formatMoney(row.total()), bodyStyle);
+        createBodyCell(dataRow, 7, formatArea(row.areaCodigo(), row.areaNombre()), bodyStyle);
+        createBodyCell(dataRow, 8, row.generadoPor(), bodyStyle);
+        createBodyCell(dataRow, 9, row.estado(), bodyStyle);
+        createBodyCell(dataRow, 10, formatMoney(row.total()), bodyStyle);
       }
 
       autosize(sheet, headers.length);
@@ -292,7 +338,7 @@ public class TesoreriaReportService {
       rowIndex = addKeyValueRow(sheet, rowIndex, "No impresas", String.valueOf(response.noImpresas()), "Series activas", String.valueOf(response.seriesActivas().size()));
       rowIndex++;
 
-      String[] headers = {"Tipo", "Referencia", "Origen", "Persona", "Fecha", "Estado", "Impreso", "Total"};
+      String[] headers = {"Tipo", "Referencia", "Origen", "Persona", "Fecha emision", "Fecha pago", "Area", "Generado por", "Estado", "Impreso", "Total"};
       CellStyle headerStyle = buildExcelHeaderStyle(workbook);
       CellStyle bodyStyle = buildExcelBodyStyle(workbook);
 
@@ -318,9 +364,12 @@ public class TesoreriaReportService {
             bodyStyle);
         createBodyCell(dataRow, 3, row.colegiadoNombre(), bodyStyle);
         createBodyCell(dataRow, 4, formatDate(row.fechaEmision()), bodyStyle);
-        createBodyCell(dataRow, 5, row.estado(), bodyStyle);
-        createBodyCell(dataRow, 6, row.impreso() ? "Si" : "No", bodyStyle);
-        createBodyCell(dataRow, 7, formatMoney(row.total()), bodyStyle);
+        createBodyCell(dataRow, 5, formatDate(row.fechaPago()), bodyStyle);
+        createBodyCell(dataRow, 6, formatArea(row.areaCodigo(), row.areaNombre()), bodyStyle);
+        createBodyCell(dataRow, 7, row.generadoPor(), bodyStyle);
+        createBodyCell(dataRow, 8, row.estado(), bodyStyle);
+        createBodyCell(dataRow, 9, row.impreso() ? "Si" : "No", bodyStyle);
+        createBodyCell(dataRow, 10, formatMoney(row.total()), bodyStyle);
       }
 
       autosize(sheet, headers.length);
@@ -633,6 +682,16 @@ public class TesoreriaReportService {
 
   private String formatDate(LocalDate value) {
     return value != null ? value.format(DISPLAY_DATE_FORMAT) : "-";
+  }
+
+  private String formatArea(String codigo, String nombre) {
+    String safeCodigo = safe(codigo, "");
+    String safeNombre = safe(nombre, "");
+    if (safeCodigo.isBlank() && safeNombre.isBlank()) {
+      return "-";
+    }
+
+    return (safeCodigo + " " + safeNombre).trim();
   }
 
   private String formatMoney(BigDecimal value) {

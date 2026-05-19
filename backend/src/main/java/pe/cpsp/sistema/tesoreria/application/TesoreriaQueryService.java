@@ -94,12 +94,12 @@ public class TesoreriaQueryService {
 
     BigDecimal totalHoy =
         operaciones.stream()
-            .filter(operacion -> today.equals(operacion.fechaEmision()))
+            .filter(operacion -> today.equals(operacion.fechaPago()))
             .map(CajaOperacion::total)
             .reduce(BigDecimal.ZERO, BigDecimal::add);
 
     long operacionesHoy =
-        operaciones.stream().filter(operacion -> today.equals(operacion.fechaEmision())).count();
+        operaciones.stream().filter(operacion -> today.equals(operacion.fechaPago())).count();
 
     long pendientesUrgentes =
         profiles.values().stream()
@@ -240,7 +240,15 @@ public class TesoreriaQueryService {
         .toList();
   }
 
-  public HistorialPageResponse getHistorial(String search, String metodoPago, int page, int size) {
+  public HistorialPageResponse getHistorial(
+      String search,
+      String metodoPago,
+      LocalDate fechaEmisionDesde,
+      LocalDate fechaEmisionHasta,
+      LocalDate fechaPagoDesde,
+      LocalDate fechaPagoHasta,
+      int page,
+      int size) {
     LocalDate today = LocalDate.now(appClock);
     LocalDate sevenDaysAgo = today.minusDays(6);
     List<CajaOperacion> operaciones = loadCajaOperacionesSorted();
@@ -255,7 +263,10 @@ public class TesoreriaQueryService {
                         operacion.participanteNombre(),
                         operacion.conceptoResumen(),
                         operacion.serie() + "-" + operacion.numeroComprobante(),
-                        operacion.tipoComprobante())
+                        operacion.tipoComprobante(),
+                        operacion.areaCodigo(),
+                        operacion.areaNombre(),
+                        operacion.generadoPor())
                     .stream()
                     .filter(Objects::nonNull)
                     .map(String::toLowerCase)
@@ -267,39 +278,44 @@ public class TesoreriaQueryService {
                 || "todos".equals(normalizedMethod)
                 || normalize(operacion.metodoPago()).equals(normalizedMethod);
 
+    Predicate<CajaOperacion> matchesDates =
+        operacion ->
+            isWithinRange(operacion.fechaEmision(), fechaEmisionDesde, fechaEmisionHasta)
+                && isWithinRange(operacion.fechaPago(), fechaPagoDesde, fechaPagoHasta);
+
+    List<CajaOperacion> filteredOperaciones =
+        operaciones.stream().filter(matchesSearch.and(matchesMethod).and(matchesDates)).toList();
+
     List<OperacionTesoreriaResponse> rows =
-        operaciones.stream()
-            .filter(matchesSearch.and(matchesMethod))
-            .map(this::toOperacionResponse)
-            .toList();
+        filteredOperaciones.stream().map(this::toOperacionResponse).toList();
 
     BigDecimal totalHoy =
-        operaciones.stream()
-            .filter(operacion -> today.equals(operacion.fechaEmision()))
+        filteredOperaciones.stream()
+            .filter(operacion -> today.equals(operacion.fechaPago()))
             .map(CajaOperacion::total)
             .reduce(BigDecimal.ZERO, BigDecimal::add);
 
     long operacionesHoy =
-        operaciones.stream().filter(operacion -> today.equals(operacion.fechaEmision())).count();
+        filteredOperaciones.stream().filter(operacion -> today.equals(operacion.fechaPago())).count();
 
     BigDecimal totalUltimosSieteDias =
-        operaciones.stream()
-            .filter(operacion -> !operacion.fechaEmision().isBefore(sevenDaysAgo))
+        filteredOperaciones.stream()
+            .filter(operacion -> !operacion.fechaPago().isBefore(sevenDaysAgo))
             .map(CajaOperacion::total)
             .reduce(BigDecimal.ZERO, BigDecimal::add);
 
     long operacionesUltimosSieteDias =
-        operaciones.stream()
-            .filter(operacion -> !operacion.fechaEmision().isBefore(sevenDaysAgo))
+        filteredOperaciones.stream()
+            .filter(operacion -> !operacion.fechaPago().isBefore(sevenDaysAgo))
             .count();
 
     BigDecimal ticketPromedio =
-        operaciones.isEmpty()
+        filteredOperaciones.isEmpty()
             ? BigDecimal.ZERO
-            : operaciones.stream()
+            : filteredOperaciones.stream()
                 .map(CajaOperacion::total)
                 .reduce(BigDecimal.ZERO, BigDecimal::add)
-                .divide(BigDecimal.valueOf(operaciones.size()), 2, RoundingMode.HALF_UP);
+                .divide(BigDecimal.valueOf(filteredOperaciones.size()), 2, RoundingMode.HALF_UP);
 
     return new HistorialPageResponse(
         totalHoy,
@@ -310,8 +326,20 @@ public class TesoreriaQueryService {
         paginate(rows, page, size));
   }
 
+  public HistorialPageResponse getHistorial(String search, String metodoPago, int page, int size) {
+    return getHistorial(search, metodoPago, null, null, null, null, page, size);
+  }
+
   public ComprobantesPageResponse getComprobantes(
-      String search, String printStatus, String tipo, int page, int size) {
+      String search,
+      String printStatus,
+      String tipo,
+      LocalDate fechaEmisionDesde,
+      LocalDate fechaEmisionHasta,
+      LocalDate fechaPagoDesde,
+      LocalDate fechaPagoHasta,
+      int page,
+      int size) {
     List<CajaOperacion> operaciones = loadCajaOperacionesSorted();
     String normalizedSearch = normalize(search);
     String normalizedPrintStatus = normalize(printStatus);
@@ -327,7 +355,10 @@ public class TesoreriaQueryService {
                                 operacion.serie(),
                                 String.valueOf(operacion.numeroComprobante()),
                                 operacion.participanteNombre(),
-                                operacion.tipoComprobante())
+                                operacion.tipoComprobante(),
+                                operacion.areaCodigo(),
+                                operacion.areaNombre(),
+                                operacion.generadoPor())
                             .stream()
                             .filter(Objects::nonNull)
                             .map(String::toLowerCase)
@@ -343,6 +374,10 @@ public class TesoreriaQueryService {
                     normalizedTipo.isBlank()
                         || "todos".equals(normalizedTipo)
                         || operacion.tipoComprobante().equalsIgnoreCase(tipo))
+            .filter(
+                operacion ->
+                    isWithinRange(operacion.fechaEmision(), fechaEmisionDesde, fechaEmisionHasta)
+                        && isWithinRange(operacion.fechaPago(), fechaPagoDesde, fechaPagoHasta))
             .map(this::toComprobanteResponse)
             .toList();
 
@@ -352,6 +387,11 @@ public class TesoreriaQueryService {
         operaciones.stream().filter(operacion -> !operacion.impreso()).count(),
         listSeriesActivas(),
         paginate(rows, page, size));
+  }
+
+  public ComprobantesPageResponse getComprobantes(
+      String search, String printStatus, String tipo, int page, int size) {
+    return getComprobantes(search, printStatus, tipo, null, null, null, null, page, size);
   }
 
   public FraccionamientosPageResponse getFraccionamientos(String search, int page, int size) {
@@ -446,7 +486,8 @@ public class TesoreriaQueryService {
             loadCobrosSorted().stream().map(this::toCajaOperacion),
             loadVentasSorted().stream().map(this::toCajaOperacion))
         .sorted(
-            Comparator.comparing(CajaOperacion::fechaEmision)
+            Comparator.comparing(CajaOperacion::fechaPago)
+                .thenComparing(CajaOperacion::fechaEmision)
                 .thenComparing(CajaOperacion::id)
                 .thenComparing(CajaOperacion::origenOperacion)
                 .reversed())
@@ -509,7 +550,7 @@ public class TesoreriaQueryService {
     List<String> paymentMethods = List.of("Efectivo", "Transferencia", "POS/Tarjeta", "Yape/Plin");
     BigDecimal totalDia =
         operaciones.stream()
-            .filter(operacion -> today.equals(operacion.fechaEmision()))
+            .filter(operacion -> today.equals(operacion.fechaPago()))
             .map(CajaOperacion::total)
             .reduce(BigDecimal.ZERO, BigDecimal::add);
 
@@ -518,7 +559,7 @@ public class TesoreriaQueryService {
             method -> {
               List<CajaOperacion> operacionesDelMetodo =
                   operaciones.stream()
-                      .filter(operacion -> today.equals(operacion.fechaEmision()))
+                      .filter(operacion -> today.equals(operacion.fechaPago()))
                       .filter(operacion -> method.equals(operacion.metodoPago()))
                       .toList();
 
@@ -546,7 +587,7 @@ public class TesoreriaQueryService {
             method -> {
               List<CajaOperacion> operacionesDelMetodo =
                   operaciones.stream()
-                      .filter(operacion -> today.equals(operacion.fechaEmision()))
+                      .filter(operacion -> today.equals(operacion.fechaPago()))
                       .filter(operacion -> method.equals(operacion.metodoPago()))
                       .toList();
               BigDecimal amount =
@@ -563,6 +604,7 @@ public class TesoreriaQueryService {
         operacion.id(),
         operacion.reference(),
         operacion.fechaEmision(),
+        operacion.fechaPago(),
         operacion.participanteNombre(),
         operacion.conceptoResumen(),
         operacion.metodoPago(),
@@ -570,6 +612,9 @@ public class TesoreriaQueryService {
         operacion.serie(),
         operacion.numeroComprobante(),
         operacion.origenOperacion(),
+        operacion.areaCodigo(),
+        operacion.areaNombre(),
+        operacion.generadoPor(),
         operacion.estado());
   }
 
@@ -581,9 +626,13 @@ public class TesoreriaQueryService {
         operacion.numeroComprobante(),
         operacion.participanteNombre(),
         operacion.fechaEmision(),
+        operacion.fechaPago(),
         operacion.total(),
         operacion.estado(),
         operacion.origenOperacion(),
+        operacion.areaCodigo(),
+        operacion.areaNombre(),
+        operacion.generadoPor(),
         operacion.impreso());
   }
 
@@ -685,6 +734,7 @@ public class TesoreriaQueryService {
         "TESORERIA",
         tesoreriaSupport.toReference(cobro.getId()),
         cobro.getFechaEmision(),
+        cobro.getFechaPago(),
         buildNombreCompleto(cobro.getColegiado()),
         tesoreriaSupport.buildConceptSummary(cobro),
         normalizeMetodoPagoLabel(cobro.getMetodoPago()),
@@ -693,6 +743,9 @@ public class TesoreriaQueryService {
         cobro.getNumeroComprobante(),
         cobro.getEstado(),
         cobro.getTipoComprobante().name(),
+        cobro.getAreaCodigo(),
+        cobro.getAreaNombre(),
+        cobro.getGeneradoPor(),
         cobro.isImpreso());
   }
 
@@ -702,6 +755,7 @@ public class TesoreriaQueryService {
         "VENTA_PRODUCTO",
         venta.getReferencia(),
         venta.getFechaVenta(),
+        venta.getFechaVenta(),
         venta.getClienteNombre(),
         buildVentaConceptSummary(venta),
         venta.getMetodoPago(),
@@ -710,6 +764,9 @@ public class TesoreriaQueryService {
         venta.getNumeroComprobante(),
         "EMITIDO",
         "BOLETA",
+        "002",
+        "Inventario",
+        "Sistema Inventario",
         venta.isImpreso());
   }
 
@@ -740,6 +797,14 @@ public class TesoreriaQueryService {
 
   private String normalize(String value) {
     return value == null ? "" : value.trim().toLowerCase();
+  }
+
+  private boolean isWithinRange(LocalDate value, LocalDate from, LocalDate to) {
+    if (value == null) {
+      return false;
+    }
+
+    return (from == null || !value.isBefore(from)) && (to == null || !value.isAfter(to));
   }
 
   public String normalizeMetodoPagoLabel(MetodoPago metodoPago) {
@@ -807,6 +872,7 @@ public class TesoreriaQueryService {
       String origenOperacion,
       String reference,
       LocalDate fechaEmision,
+      LocalDate fechaPago,
       String participanteNombre,
       String conceptoResumen,
       String metodoPago,
@@ -815,5 +881,8 @@ public class TesoreriaQueryService {
       Long numeroComprobante,
       String estado,
       String tipoComprobante,
+      String areaCodigo,
+      String areaNombre,
+      String generadoPor,
       boolean impreso) {}
 }

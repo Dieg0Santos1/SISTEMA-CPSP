@@ -213,7 +213,7 @@ public class ColegiadoService {
   }
 
   private HabilitacionInfo toHabilitacionInfo(CobroDetalle detalle) {
-    LocalDate fechaPago = detalle.getCobro().getFechaEmision();
+    LocalDate fechaPago = detalle.getCobro().getFechaPago();
     LocalDate habilitadoHasta = fechaPago.plusMonths(3);
     boolean habilitado = !LocalDate.now(appClock).isAfter(habilitadoHasta);
 

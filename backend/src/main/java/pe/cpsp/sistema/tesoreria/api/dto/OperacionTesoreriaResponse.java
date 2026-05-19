@@ -7,6 +7,7 @@ public record OperacionTesoreriaResponse(
     Long cobroId,
     String reference,
     LocalDate fechaEmision,
+    LocalDate fechaPago,
     String colegiadoNombre,
     String conceptoResumen,
     String metodoPago,
@@ -14,4 +15,7 @@ public record OperacionTesoreriaResponse(
     String serie,
     Long numeroComprobante,
     String origenOperacion,
+    String areaCodigo,
+    String areaNombre,
+    String generadoPor,
     String estado) {}

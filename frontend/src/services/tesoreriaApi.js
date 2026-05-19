@@ -158,21 +158,46 @@ export async function markTesoreriaCobroPrinted(cobroId) {
 export async function getTesoreriaHistorial({
   search = '',
   metodoPago = 'Todos',
+  fechaEmisionDesde = '',
+  fechaEmisionHasta = '',
+  fechaPagoDesde = '',
+  fechaPagoHasta = '',
   page = 1,
   size = 6,
 } = {}) {
   return requestJson(
-    `/tesoreria/historial${buildQuery({ search, metodoPago, page, size })}`,
+    `/tesoreria/historial${buildQuery({
+      search,
+      metodoPago,
+      fechaEmisionDesde,
+      fechaEmisionHasta,
+      fechaPagoDesde,
+      fechaPagoHasta,
+      page,
+      size,
+    })}`,
   )
 }
 
 export async function downloadTesoreriaHistorialReport({
   search = '',
   metodoPago = 'Todos',
+  fechaEmisionDesde = '',
+  fechaEmisionHasta = '',
+  fechaPagoDesde = '',
+  fechaPagoHasta = '',
   format = 'pdf',
 } = {}) {
   const file = await requestFile(
-    `/tesoreria/historial/export${buildQuery({ search, metodoPago, format })}`,
+    `/tesoreria/historial/export${buildQuery({
+      search,
+      metodoPago,
+      fechaEmisionDesde,
+      fechaEmisionHasta,
+      fechaPagoDesde,
+      fechaPagoHasta,
+      format,
+    })}`,
   )
 
   const url = URL.createObjectURL(file.blob)
@@ -187,11 +212,25 @@ export async function getTesoreriaComprobantes({
   search = '',
   printStatus = 'Todos',
   tipo = 'Todos',
+  fechaEmisionDesde = '',
+  fechaEmisionHasta = '',
+  fechaPagoDesde = '',
+  fechaPagoHasta = '',
   page = 1,
   size = 6,
 } = {}) {
   return requestJson(
-    `/tesoreria/comprobantes${buildQuery({ search, printStatus, tipo, page, size })}`,
+    `/tesoreria/comprobantes${buildQuery({
+      search,
+      printStatus,
+      tipo,
+      fechaEmisionDesde,
+      fechaEmisionHasta,
+      fechaPagoDesde,
+      fechaPagoHasta,
+      page,
+      size,
+    })}`,
   )
 }
 
@@ -199,10 +238,23 @@ export async function downloadTesoreriaComprobantesReport({
   search = '',
   printStatus = 'Todos',
   tipo = 'Todos',
+  fechaEmisionDesde = '',
+  fechaEmisionHasta = '',
+  fechaPagoDesde = '',
+  fechaPagoHasta = '',
   format = 'pdf',
 } = {}) {
   const file = await requestFile(
-    `/tesoreria/comprobantes/export${buildQuery({ search, printStatus, tipo, format })}`,
+    `/tesoreria/comprobantes/export${buildQuery({
+      search,
+      printStatus,
+      tipo,
+      fechaEmisionDesde,
+      fechaEmisionHasta,
+      fechaPagoDesde,
+      fechaPagoHasta,
+      format,
+    })}`,
   )
 
   const url = URL.createObjectURL(file.blob)

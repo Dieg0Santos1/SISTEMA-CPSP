@@ -44,6 +44,12 @@ function openPdfBlob(blob) {
 function CobrosHistorialPage() {
   const [searchTerm, setSearchTerm] = useState('')
   const [activeMethod, setActiveMethod] = useState(methodFilters[0])
+  const [dateFilters, setDateFilters] = useState({
+    fechaEmisionDesde: '',
+    fechaEmisionHasta: '',
+    fechaPagoDesde: '',
+    fechaPagoHasta: '',
+  })
   const [currentPage, setCurrentPage] = useState(1)
   const [data, setData] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -64,6 +70,7 @@ function CobrosHistorialPage() {
         const response = await getTesoreriaHistorial({
           search: searchTerm,
           metodoPago: activeMethod,
+          ...dateFilters,
           page: currentPage,
           size: 5,
         })
@@ -91,7 +98,7 @@ function CobrosHistorialPage() {
     return () => {
       isMounted = false
     }
-  }, [activeMethod, currentPage, searchTerm])
+  }, [activeMethod, currentPage, dateFilters, searchTerm])
 
   const summaryCards = useMemo(
     () => [
@@ -168,6 +175,7 @@ function CobrosHistorialPage() {
       await downloadTesoreriaHistorialReport({
         search: searchTerm,
         metodoPago: activeMethod,
+        ...dateFilters,
         format,
       })
       setIsExportModalOpen(false)
@@ -199,6 +207,21 @@ function CobrosHistorialPage() {
     } finally {
       setActiveRowActionId(null)
     }
+  }
+
+  function updateDateFilter(name, value) {
+    setDateFilters((current) => ({ ...current, [name]: value }))
+    setCurrentPage(1)
+  }
+
+  function clearDateFilters() {
+    setDateFilters({
+      fechaEmisionDesde: '',
+      fechaEmisionHasta: '',
+      fechaPagoDesde: '',
+      fechaPagoHasta: '',
+    })
+    setCurrentPage(1)
   }
 
   return (
@@ -280,6 +303,34 @@ function CobrosHistorialPage() {
               </button>
             ))}
           </div>
+
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[repeat(4,minmax(0,1fr))_auto]">
+            {[
+              ['fechaEmisionDesde', 'Emision desde'],
+              ['fechaEmisionHasta', 'Emision hasta'],
+              ['fechaPagoDesde', 'Pago desde'],
+              ['fechaPagoHasta', 'Pago hasta'],
+            ].map(([name, label]) => (
+              <label key={name} className="block">
+                <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                  {label}
+                </span>
+                <input
+                  type="date"
+                  value={dateFilters[name]}
+                  onChange={(event) => updateDateFilter(name, event.target.value)}
+                  className="mt-2 h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm font-semibold text-slate-700 outline-none transition focus:border-cobalt focus:bg-white"
+                />
+              </label>
+            ))}
+            <button
+              type="button"
+              onClick={clearDateFilters}
+              className="self-end rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-600 transition hover:border-slate-300"
+            >
+              Limpiar fechas
+            </button>
+          </div>
         </div>
 
         {errorMessage ? (
@@ -320,7 +371,12 @@ function CobrosHistorialPage() {
                   </p>
                   <p className="mt-1 text-sm text-slate-500">{row.colegiadoNombre}</p>
                   <div className="mt-3 flex flex-wrap items-center gap-3 text-sm text-slate-500">
-                    <span>{formatDate(row.fechaEmision)}</span>
+                    <span>Emision {formatDate(row.fechaEmision)}</span>
+                    <span>Pago {formatDate(row.fechaPago)}</span>
+                    <span>
+                      Area {row.areaCodigo} {row.areaNombre}
+                    </span>
+                    <span>Generado por {row.generadoPor}</span>
                     <span>
                       {row.serie}-{String(row.numeroComprobante).padStart(7, '0')}
                     </span>

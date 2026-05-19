@@ -10,7 +10,11 @@ public record ComprobanteListadoResponse(
     Long numeroComprobante,
     String colegiadoNombre,
     LocalDate fechaEmision,
+    LocalDate fechaPago,
     BigDecimal total,
     String estado,
     String origenOperacion,
+    String areaCodigo,
+    String areaNombre,
+    String generadoPor,
     boolean impreso) {}

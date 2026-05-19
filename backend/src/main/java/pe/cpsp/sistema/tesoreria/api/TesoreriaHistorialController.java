@@ -1,8 +1,10 @@
 package pe.cpsp.sistema.tesoreria.api;
 
+import java.time.LocalDate;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -29,18 +31,49 @@ public class TesoreriaHistorialController {
   public HistorialPageResponse getHistorial(
       @RequestParam(defaultValue = "") String search,
       @RequestParam(defaultValue = "Todos") String metodoPago,
+      @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+          LocalDate fechaEmisionDesde,
+      @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+          LocalDate fechaEmisionHasta,
+      @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+          LocalDate fechaPagoDesde,
+      @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+          LocalDate fechaPagoHasta,
       @RequestParam(defaultValue = "1") int page,
       @RequestParam(defaultValue = "10") int size) {
-    return tesoreriaQueryService.getHistorial(search, metodoPago, page, size);
+    return tesoreriaQueryService.getHistorial(
+        search,
+        metodoPago,
+        fechaEmisionDesde,
+        fechaEmisionHasta,
+        fechaPagoDesde,
+        fechaPagoHasta,
+        page,
+        size);
   }
 
   @GetMapping("/export")
   public ResponseEntity<byte[]> exportHistorial(
       @RequestParam(defaultValue = "") String search,
       @RequestParam(defaultValue = "Todos") String metodoPago,
+      @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+          LocalDate fechaEmisionDesde,
+      @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+          LocalDate fechaEmisionHasta,
+      @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+          LocalDate fechaPagoDesde,
+      @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+          LocalDate fechaPagoHasta,
       @RequestParam(defaultValue = "pdf") String format) {
     TesoreriaReportService.ReportFile report =
-        tesoreriaReportService.exportHistorial(search, metodoPago, format);
+        tesoreriaReportService.exportHistorial(
+            search,
+            metodoPago,
+            fechaEmisionDesde,
+            fechaEmisionHasta,
+            fechaPagoDesde,
+            fechaPagoHasta,
+            format);
 
     return ResponseEntity.ok()
         .header(

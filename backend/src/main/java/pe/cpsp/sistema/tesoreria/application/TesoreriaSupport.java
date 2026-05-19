@@ -61,7 +61,7 @@ class TesoreriaSupport {
     boolean ceremoniaPendiente = ceremonyDetails.isEmpty();
     LocalDate ceremonyPaymentDate =
         ceremonyDetails.stream()
-            .map(detalle -> detalle.getCobro().getFechaEmision())
+            .map(detalle -> detalle.getCobro().getFechaPago())
             .filter(Objects::nonNull)
             .sorted()
             .findFirst()
@@ -69,7 +69,7 @@ class TesoreriaSupport {
 
     LocalDate fechaUltimoPago =
         qualifyingDetails.stream()
-            .map(detalle -> detalle.getCobro().getFechaEmision())
+            .map(detalle -> detalle.getCobro().getFechaPago())
             .filter(Objects::nonNull)
             .max(LocalDate::compareTo)
             .orElse(null);

@@ -17,7 +17,7 @@ public interface CobroDetalleRepository extends JpaRepository<CobroDetalle, Long
       join fetch cobro.colegiado colegiado
       join fetch detalle.conceptoCobro concepto
       where concepto.afectaHabilitacion = true
-      order by cobro.fechaEmision desc, detalle.id desc
+      order by cobro.fechaPago desc, detalle.id desc
       """)
   List<CobroDetalle> findPagosQueAfectanHabilitacion();
 }

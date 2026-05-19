@@ -94,7 +94,7 @@ public class DashboardService {
 
     Map<Month, BigDecimal> aportacionesSeries = initializeMonthlyMap();
     for (Cobro cobro : cobros) {
-      if (cobro.getFechaEmision() == null || !currentYear.equals(Year.from(cobro.getFechaEmision()))) {
+      if (cobro.getFechaPago() == null || !currentYear.equals(Year.from(cobro.getFechaPago()))) {
         continue;
       }
 
@@ -105,7 +105,7 @@ public class DashboardService {
               .filter(Objects::nonNull)
               .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-      Month month = cobro.getFechaEmision().getMonth();
+      Month month = cobro.getFechaPago().getMonth();
       aportacionesSeries.computeIfPresent(month, (ignored, value) -> value.add(totalAportacionesMes));
     }
 
@@ -139,8 +139,8 @@ public class DashboardService {
 
   private BigDecimal sumCobrosForMonth(List<Cobro> cobros, YearMonth targetMonth) {
     return cobros.stream()
-        .filter(cobro -> cobro.getFechaEmision() != null)
-        .filter(cobro -> YearMonth.from(cobro.getFechaEmision()).equals(targetMonth))
+        .filter(cobro -> cobro.getFechaPago() != null)
+        .filter(cobro -> YearMonth.from(cobro.getFechaPago()).equals(targetMonth))
         .map(Cobro::getTotal)
         .filter(Objects::nonNull)
         .reduce(BigDecimal.ZERO, BigDecimal::add);

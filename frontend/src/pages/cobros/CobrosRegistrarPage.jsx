@@ -19,8 +19,15 @@ import {
   postTesoreriaCobro,
 } from '../../services/tesoreriaApi'
 import FractionationDetailModal from '../../components/cobros/FractionationDetailModal'
+import useSession from '../../hooks/useSession'
 
 const pageSize = 6
+const areaOptions = [
+  { codigo: '001', nombre: 'Tesoreria' },
+  { codigo: '002', nombre: 'Inventario' },
+  { codigo: '003', nombre: 'Recursos Humanos' },
+  { codigo: '004', nombre: 'Administracion' },
+]
 const documentOptions = [
   { value: 'BOLETA', label: 'Boleta' },
   { value: 'FACTURA', label: 'Factura' },
@@ -549,6 +556,7 @@ function FractionationModal({
 }
 
 function CobrosRegistrarPage() {
+  const { user } = useSession()
   const [memberSearch, setMemberSearch] = useState('')
   const [membersPage, setMembersPage] = useState(1)
   const [membersData, setMembersData] = useState(null)
@@ -570,6 +578,9 @@ function CobrosRegistrarPage() {
   const [draftItems, setDraftItems] = useState([])
   const [documentType, setDocumentType] = useState('BOLETA')
   const [emissionDate, setEmissionDate] = useState(getTodayInLimaISO())
+  const [paymentDate, setPaymentDate] = useState(getTodayInLimaISO())
+  const [areaCode, setAreaCode] = useState(areaOptions[0].codigo)
+  const [generatedBy, setGeneratedBy] = useState(user.fullName)
   const [paymentMethod, setPaymentMethod] = useState('Efectivo')
   const [observation, setObservation] = useState('')
   const [submitError, setSubmitError] = useState('')
@@ -726,6 +737,10 @@ function CobrosRegistrarPage() {
     () => concepts.find((item) => String(item.id) === selectedConceptId) ?? null,
     [concepts, selectedConceptId],
   )
+  const selectedArea = useMemo(
+    () => areaOptions.find((area) => area.codigo === areaCode) ?? areaOptions[0],
+    [areaCode],
+  )
   const periodsMensuales = useMemo(
     () => selectedMemberDetail?.periodosMensuales ?? [],
     [selectedMemberDetail?.periodosMensuales],
@@ -766,17 +781,17 @@ function CobrosRegistrarPage() {
       return ''
     }
 
-    const emissionPeriod = extractPeriodFromDate(emissionDate)
-    const availableUntilEmission = selectablePeriods.filter(
-      (period) => !emissionPeriod || comparePeriods(period.periodo, emissionPeriod) <= 0,
+    const paymentPeriod = extractPeriodFromDate(paymentDate)
+    const availableUntilPayment = selectablePeriods.filter(
+      (period) => !paymentPeriod || comparePeriods(period.periodo, paymentPeriod) <= 0,
     )
 
     return (
-      availableUntilEmission[availableUntilEmission.length - 1]?.periodo ??
+      availableUntilPayment[availableUntilPayment.length - 1]?.periodo ??
       selectablePeriods[0]?.periodo ??
       ''
     )
-  }, [emissionDate, selectablePeriods])
+  }, [paymentDate, selectablePeriods])
   const rangeStartOptions = useMemo(
     () =>
       selectablePeriods.filter(
@@ -1126,6 +1141,10 @@ function CobrosRegistrarPage() {
         colegiadoId: selectedMemberDetail.id,
         tipoComprobante: documentType,
         fechaEmision: emissionDate,
+        fechaPago: paymentDate,
+        areaCodigo: selectedArea.codigo,
+        areaNombre: selectedArea.nombre,
+        generadoPor: generatedBy.trim() || user.fullName,
         metodoPago:
           paymentOptions.find((item) => item.value === paymentMethod)?.requestValue ?? 'EFECTIVO',
         observacion: observation.trim() || null,
@@ -1856,6 +1875,47 @@ function CobrosRegistrarPage() {
 
             <label className="block">
               <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-300">
+                Fecha de pago
+              </span>
+              <input
+                type="date"
+                value={paymentDate}
+                onChange={(event) => setPaymentDate(event.target.value)}
+                className="mt-2.5 h-[52px] w-full rounded-2xl border border-white/10 bg-white/5 px-4 text-sm font-semibold text-white outline-none transition focus:border-cobalt"
+              />
+            </label>
+
+            <label className="block">
+              <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-300">
+                Area
+              </span>
+              <select
+                value={areaCode}
+                onChange={(event) => setAreaCode(event.target.value)}
+                className="mt-2.5 h-[52px] w-full rounded-2xl border border-white/10 bg-white/5 px-4 text-sm font-semibold text-white outline-none transition focus:border-cobalt"
+              >
+                {areaOptions.map((area) => (
+                  <option key={area.codigo} value={area.codigo} className="text-slate-900">
+                    {area.codigo} - {area.nombre}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="block">
+              <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-300">
+                Generado por
+              </span>
+              <input
+                type="text"
+                value={generatedBy}
+                onChange={(event) => setGeneratedBy(event.target.value)}
+                className="mt-2.5 h-[52px] w-full rounded-2xl border border-white/10 bg-white/5 px-4 text-sm font-semibold text-white outline-none transition focus:border-cobalt"
+              />
+            </label>
+
+            <label className="block">
+              <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-300">
                 Metodo de pago
               </span>
               <select
@@ -1971,13 +2031,37 @@ function CobrosRegistrarPage() {
               </button>
             </div>
 
-            <div className="mt-5 grid gap-4 md:grid-cols-4">
+            <div className="mt-5 grid gap-4 md:grid-cols-3 xl:grid-cols-4">
               <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-4">
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
                   Fecha de emision
                 </p>
                 <p className="mt-2 text-lg font-semibold text-slate-950">
                   {formatDate(receipt.fechaEmision)}
+                </p>
+              </div>
+              <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                  Fecha de pago
+                </p>
+                <p className="mt-2 text-lg font-semibold text-slate-950">
+                  {formatDate(receipt.fechaPago)}
+                </p>
+              </div>
+              <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                  Area
+                </p>
+                <p className="mt-2 text-lg font-semibold text-slate-950">
+                  {receipt.areaCodigo} {receipt.areaNombre}
+                </p>
+              </div>
+              <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                  Generado por
+                </p>
+                <p className="mt-2 text-lg font-semibold text-slate-950">
+                  {receipt.generadoPor}
                 </p>
               </div>
               <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-4">
